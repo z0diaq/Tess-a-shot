@@ -5,10 +5,12 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 import pytesseract
 from PIL import Image, ImageTk
 import os
+import platform
 import pyperclip
 import time
 
-# pytesseract.pytesseract.tesseract_cmd = 'Z:\\dev\\vcpkg\\installed\\x64-windows-static\\tools\\tesseract\\tesseract.exe'
+if platform.system() == "Windows":
+    pytesseract.pytesseract.tesseract_cmd = 'Z:\\dev\\vcpkg\\installed\\x64-windows-static\\tools\\tesseract\\tesseract.exe'
 
 image_load_time = 0.0
 image_resize_time = 0.0
@@ -55,7 +57,6 @@ def load_image(file_path):
         
         # Calculate loading time
         image_load_time = (time.time() - start_time) * 1000  # Convert to milliseconds
-        #status_label.config(text=f"Image loaded in {load_time}ms: {file_path.split('/')[-1]}")
         
         # Update the display and force a refresh
         window.update_idletasks()
@@ -64,7 +65,6 @@ def load_image(file_path):
         # Automatically process the image for OCR
         process_image()
     except Exception as e:
-        #status_label.config(text=f"Error loading image: {e}")
         error_message = f"Error loading image: {e}"
         show_status()
         image_label.config(image=None)
@@ -229,23 +229,38 @@ def process_image():
         
         # Update status with file name and timing information
         image_file_name = loaded_image_path.split('/')[-1]
-        #status_label.config(text=f"Image: {file_name} | OCR completed in {ocr_time}ms | {len(extracted_text)} characters extracted")
         show_status()
     except FileNotFoundError:
         text_output.delete("1.0", tk.END)
         text_output.insert(tk.END, "Error: Image file not found.")
-        #status_label.config(text="Error: Image file not found.")
         show_status()
     except Exception as e:
         text_output.delete("1.0", tk.END)
         text_output.insert(tk.END, f"Error during OCR processing: {e}")
-        #status_label.config(text=f"Error during OCR processing: {e} ({int((time.time() - start_time) * 1000)}ms)")
         show_status()
+
+def reformat_text(text):
+    """
+    Reformat text to ensure only one space exists between words.
+    """
+    # Split text into lines
+    words = text.split()
+    
+    # Process each line to normalize whitespace
+    normalized_words = []
+    for word in words:
+        if word in [',', ':', '.', ';'] and len(normalized_words) > 0:
+            normalized_words[-1] += word
+        else:
+            normalized_words.append(word)
+    
+    # Join lines back with newlines
+    return ' '.join(normalized_words)
 
 # Create the main window
 window = TkinterDnD.Tk()
-window.title("OCR Application with Image Preview")
-window.geometry("800x600")  # Increased size to accommodate image display
+window.title("Tess-a-shot")
+window.geometry("800x600")
 
 # Global variables for caching
 last_display_width = 0
@@ -262,11 +277,8 @@ main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 # Create left frame for image
 left_frame = tk.Frame(main_frame)
 left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
-#left_frame.register_drop_target("*")
 left_frame.drop_target_register(DND_FILES)
 left_frame.dnd_bind("<<Drop>>", handle_drop)
-#tkdnd.TkinterDnD(root=left_frame, dnd=DND_FILES)
-
 
 # Create right frame for text output
 right_frame = tk.Frame(main_frame)
@@ -287,8 +299,6 @@ entry_image_path.pack(side=tk.LEFT, padx=5)
 button_select_image = tk.Button(controls_frame, text="Select Image", command=select_image)
 button_select_image.pack(side=tk.LEFT, padx=5)
 
-# Note: Process Image button removed, as OCR now happens automatically after image loading
-
 # Add buttons frame for text operations
 buttons_frame = tk.Frame(window)
 buttons_frame.pack(fill=tk.X, pady=5)
@@ -302,6 +312,10 @@ def copy_to_clipboard():
         selected_text = text_output.get("1.0", tk.END)
     
     if selected_text:
+        # Apply reformatting if the option is checked
+        if reformat_lines_var.get():
+            selected_text = reformat_text(selected_text)
+        
         pyperclip.copy(selected_text)
         status_label.config(text="Text copied to clipboard.")
     else:
@@ -385,10 +399,19 @@ window.bind("<Configure>", on_resize)
 text_label = tk.Label(right_frame, text="Extracted Text:")
 text_label.pack(pady=(0, 5), anchor=tk.W)
 
-# Add "Copy text on select" checkbox
+# Add checkboxes in a horizontal frame
+checkboxes_frame = tk.Frame(right_frame)
+checkboxes_frame.pack(anchor=tk.W, pady=(0, 5), fill=tk.X)
+
+# "Copy text on select" checkbox
 copy_on_select_var = tk.BooleanVar()
-copy_on_select_checkbox = tk.Checkbutton(right_frame, text="Copy text on select", variable=copy_on_select_var)
-copy_on_select_checkbox.pack(anchor=tk.W, pady=(0, 5))
+copy_on_select_checkbox = tk.Checkbutton(checkboxes_frame, text="Copy text on select", variable=copy_on_select_var)
+copy_on_select_checkbox.pack(side=tk.LEFT, padx=(0, 10))
+
+# "Reformat copied lines" checkbox
+reformat_lines_var = tk.BooleanVar()
+reformat_lines_checkbox = tk.Checkbutton(checkboxes_frame, text="Reformat copied lines", variable=reformat_lines_var)
+reformat_lines_checkbox.pack(side=tk.LEFT)
 
 text_output = scrolledtext.ScrolledText(right_frame, width=40, height=15)
 text_output.pack(fill=tk.BOTH, expand=True)
@@ -400,6 +423,10 @@ def on_text_selection(event):
         try:
             selected_text = text_output.get(tk.SEL_FIRST, tk.SEL_LAST)
             if selected_text:
+                # Apply reformatting if the option is checked
+                if reformat_lines_var.get():
+                    selected_text = reformat_text(selected_text)
+                
                 pyperclip.copy(selected_text)
                 status_label.config(text="Selected text copied to clipboard.")
         except tk.TclError:  # No selection
