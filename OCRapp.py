@@ -274,15 +274,21 @@ resize_delay = 300  # Milliseconds
 main_frame = tk.Frame(window)
 main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
+# Create a PanedWindow for resizable frames
+paned_window = tk.PanedWindow(main_frame, orient=tk.HORIZONTAL, sashwidth=5, sashrelief=tk.RAISED)
+paned_window.pack(fill=tk.BOTH, expand=True)
+
 # Create left frame for image
-left_frame = tk.Frame(main_frame)
-left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+left_frame = tk.Frame(paned_window)
 left_frame.drop_target_register(DND_FILES)
 left_frame.dnd_bind("<<Drop>>", handle_drop)
 
 # Create right frame for text output
-right_frame = tk.Frame(main_frame)
-right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
+right_frame = tk.Frame(paned_window)
+
+# Add the frames to the paned window
+paned_window.add(left_frame, width=400)  # Default width
+paned_window.add(right_frame, width=400)  # Default width
 
 # Top controls frame
 controls_frame = tk.Frame(window)
@@ -368,33 +374,6 @@ image_frame_label.pack(pady=(0, 5), anchor=tk.W)
 image_label = tk.Label(left_frame, bg="lightgray", width=40, height=15)
 image_label.pack(fill=tk.BOTH, expand=True)
 
-# Bind a function to window resize to update image size when window changes
-def on_resize(event):
-    """
-    Handle window resize events with throttling to prevent performance issues.
-    Only triggers image resize when the window size has stabilized.
-    """
-    global last_resize_time
-    
-    # Skip events from widgets other than the main window
-    if event.widget != window:
-        return
-        
-    # Get current time
-    current_time = time.time() * 1000  # Convert to milliseconds
-    
-    # Cancel any pending resize tasks
-    try:
-        window.after_cancel(window._resize_job)
-    except (AttributeError, tk.TclError):
-        pass
-    
-    # Schedule a new resize task with delay
-    window._resize_job = window.after(resize_delay, display_image)
-
-# Bind the resize event to the window
-window.bind("<Configure>", on_resize)
-
 # Text output area (right side)
 text_label = tk.Label(right_frame, text="Extracted Text:")
 text_label.pack(pady=(0, 5), anchor=tk.W)
@@ -434,6 +413,43 @@ def on_text_selection(event):
 
 # Bind the text selection event to the text_output widget
 text_output.bind("<<Selection>>", on_text_selection)
+
+# Override the on_resize function to include the PanedWindow
+def on_resize(event):
+    """
+    Handle window resize events with throttling to prevent performance issues.
+    Only triggers image resize when the window size has stabilized.
+    """
+    global last_resize_time
+    
+    # Skip events from widgets other than the main window
+    if event.widget != window:
+        return
+        
+    # Get current time
+    current_time = time.time() * 1000  # Convert to milliseconds
+    
+    # Cancel any pending resize tasks
+    try:
+        window.after_cancel(window._resize_job)
+    except (AttributeError, tk.TclError):
+        pass
+    
+    # Schedule a new resize task with delay
+    window._resize_job = window.after(resize_delay, display_image)
+
+# Bind the resize event to the window
+window.bind("<Configure>", on_resize)
+
+# Set initial sash position to 50% of the window width
+def set_initial_sash_position():
+    window_width = window.winfo_width()
+    if window_width > 1:  # Ensure window has been drawn
+        paned_window.sash_place(0, window_width // 2, 0)
+        window.after_cancel(set_sash_job)
+
+# Schedule the sash position setting after the window is drawn
+set_sash_job = window.after(100, set_initial_sash_position)
 
 # Run the application
 window.mainloop()
