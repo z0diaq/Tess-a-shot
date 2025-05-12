@@ -8,6 +8,7 @@ import os
 import platform
 import pyperclip
 import time
+import json
 
 if platform.system() == "Windows":
     pytesseract.pytesseract.tesseract_cmd = 'Z:\\dev\\vcpkg\\installed\\x64-windows-static\\tools\\tesseract\\tesseract.exe'
@@ -18,6 +19,90 @@ image_ocr_time = 0.0
 image_file_name = ""
 extracted_text = ""
 error_message = ""
+
+
+# Configuration file path
+CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".tessashot_config.json")
+
+# Default settings
+DEFAULT_SETTINGS = {
+    "window": {
+        "width": 800,
+        "height": 600,
+        "x": None,
+        "y": None
+    },
+    "pane_ratio": 0.5,  # 50% split for left/right panes
+    "options": {
+        "copy_on_select": False,
+        "reformat_lines": False
+    }
+}
+
+# Global settings variable
+settings = DEFAULT_SETTINGS.copy()
+
+def save_settings():
+    """Save current application settings to the config file"""
+    global settings
+    
+    # Update window geometry in settings
+    settings["window"]["width"] = window.winfo_width()  
+    settings["window"]["height"] = window.winfo_height()
+    settings["window"]["x"] = window.winfo_x()
+    settings["window"]["y"] = window.winfo_y()
+    
+    # Calculate pane ratio based on current frame widths
+    if main_frame.winfo_width() > 0:  # Prevent division by zero
+        settings["pane_ratio"] = left_frame.winfo_width() / main_frame.winfo_width()
+    
+    # Update options settings
+    settings["options"]["copy_on_select"] = copy_on_select_var.get()
+    settings["options"]["reformat_lines"] = reformat_lines_var.get()
+    
+    # Write to file
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(settings, f, indent=4)
+    except Exception as e:
+        print(f"Error saving settings: {e}")
+
+def load_settings():
+    """Load application settings from the config file"""
+    global settings
+    
+    try:
+        # Check if the config file exists
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r') as f:
+                loaded_settings = json.load(f)
+                # Update our settings with loaded values
+                settings.update(loaded_settings)
+    except Exception as e:
+        print(f"Error loading settings: {e}")
+        
+    return settings
+
+def apply_settings():
+    """Apply loaded settings to the application"""
+    global settings
+    
+    # Set window size and position
+    width = settings["window"]["width"]
+    height = settings["window"]["height"]
+    x = settings["window"]["x"]
+    y = settings["window"]["y"]
+    
+    # Set window geometry
+    geometry = f"{width}x{height}"
+    if x is not None and y is not None:
+        geometry += f"+{x}+{y}"
+    window.geometry(geometry)
+    
+    # Set checkbox values
+    copy_on_select_var.set(settings["options"]["copy_on_select"])
+    reformat_lines_var.set(settings["options"]["reformat_lines"])
+
 
 def select_image():
     """
@@ -260,7 +345,9 @@ def reformat_text(text):
 # Create the main window
 window = TkinterDnD.Tk()
 window.title("Tess-a-shot")
-window.geometry("800x600")
+
+# Load settings before configuring the UI
+settings = load_settings()
 
 # Global variables for caching
 last_display_width = 0
@@ -447,6 +534,16 @@ def set_initial_sash_position():
     if window_width > 1:  # Ensure window has been drawn
         paned_window.sash_place(0, window_width // 2, 0)
         window.after_cancel(set_sash_job)
+
+# Save settings on window close
+def on_closing():
+    save_settings()
+    window.destroy()
+
+window.protocol("WM_DELETE_WINDOW", on_closing)
+
+# Apply saved settings
+apply_settings()
 
 # Schedule the sash position setting after the window is drawn
 set_sash_job = window.after(100, set_initial_sash_position)
