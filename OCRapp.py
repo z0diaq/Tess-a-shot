@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, ttk
 from tkinter import scrolledtext
 from tkinterdnd2 import DND_FILES, TkinterDnD
 import pytesseract
@@ -19,7 +19,7 @@ image_ocr_time = 0.0
 image_file_name = ""
 extracted_text = ""
 error_message = ""
-
+current_directory = ""
 
 # Configuration file path
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".tessashot_config.json")
@@ -27,16 +27,18 @@ CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".tessashot_config.json")
 # Default settings
 DEFAULT_SETTINGS = {
     "window": {
-        "width": 800,
-        "height": 600,
+        "width": 900,
+        "height": 700,
         "x": None,
         "y": None
     },
-    "pane_ratio": 0.5,  # 50% split for left/right panes
+    "pane_ratio": 0.3,  # 30% for file list, 70% for preview/text
+    "right_pane_ratio": 0.5,  # 50% split for image preview and text output
     "options": {
         "copy_on_select": False,
         "reformat_lines": False
-    }
+    },
+    "last_directory": ""
 }
 
 # Global settings variable
@@ -56,9 +58,16 @@ def save_settings():
     if main_frame.winfo_width() > 0:  # Prevent division by zero
         settings["pane_ratio"] = left_frame.winfo_width() / main_frame.winfo_width()
     
+    # Calculate right pane ratio
+    if right_frame.winfo_height() > 0:  # Prevent division by zero
+        settings["right_pane_ratio"] = image_preview_frame.winfo_height() / right_frame.winfo_height()
+    
     # Update options settings
     settings["options"]["copy_on_select"] = copy_on_select_var.get()
     settings["options"]["reformat_lines"] = reformat_lines_var.get()
+    
+    # Save last directory
+    settings["last_directory"] = current_directory
     
     # Write to file
     try:
@@ -85,7 +94,7 @@ def load_settings():
 
 def apply_settings():
     """Apply loaded settings to the application"""
-    global settings
+    global settings, current_directory
     
     # Set window size and position
     width = settings["window"]["width"]
@@ -102,31 +111,92 @@ def apply_settings():
     # Set checkbox values
     copy_on_select_var.set(settings["options"]["copy_on_select"])
     reformat_lines_var.set(settings["options"]["reformat_lines"])
-
-
-def select_image():
-    """
-    Opens a file dialog to select an image file.
-    Delegates image loading to the load_image function.
-    If no file is selected, it returns without doing anything.
-    """
     
-    file_path = filedialog.askopenfilename()
-    if not file_path:
+    # Set last used directory
+    current_directory = settings["last_directory"]
+    if current_directory and os.path.exists(current_directory):
+        directory_entry.delete(0, tk.END)
+        directory_entry.insert(0, current_directory)
+        refresh_file_list()
+
+def select_directory():
+    """Opens a file dialog to select a directory."""
+    global current_directory
+    
+    directory_path = filedialog.askdirectory()
+    if not directory_path:
         return
-    load_image(file_path) 
+        
+    current_directory = directory_path
+    directory_entry.delete(0, tk.END)
+    directory_entry.insert(0, directory_path)
+    
+    # Update the file list
+    refresh_file_list()
+
+def refresh_file_list():
+    """Refreshes the file list based on the current directory."""
+    global current_directory
+    
+    # Clear the current file list
+    file_listbox.delete(0, tk.END)
+    
+    if not current_directory or not os.path.exists(current_directory):
+        return
+    
+    # Get all image files in the directory
+    image_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif')
+    try:
+        files = [f for f in os.listdir(current_directory) 
+                if os.path.isfile(os.path.join(current_directory, f)) 
+                and f.lower().endswith(image_extensions)]
+        
+        # Sort files alphabetically
+        files.sort()
+        
+        # Add files to the listbox
+        for file in files:
+            file_listbox.insert(tk.END, file)
+            
+        # Update status
+        status_label.config(text=f"Found {len(files)} image files in {current_directory}")
+    except Exception as e:
+        status_label.config(text=f"Error reading directory: {e}")
+
+def on_file_select(event):
+    """Handles file selection from the listbox."""
+    selection = file_listbox.curselection()
+    if not selection:
+        return
+        
+    filename = file_listbox.get(selection[0])
+    file_path = os.path.join(current_directory, filename)
+    
+    # Load the selected image
+    load_image(file_path)
 
 def load_image(file_path):
     """
     Loads an image from the specified file path, updates the UI, and processes the image for OCR.
     """
-    global loaded_image_path, original_image, image_load_time
+    global loaded_image_path, original_image, image_load_time, current_directory
 
-    entry_image_path.delete(0, tk.END)
-    entry_image_path.insert(0, file_path)
-    
-    # Reset cache variables
-    loaded_image_path = file_path
+    # Update the directory entry if it's from a different directory
+    directory = os.path.dirname(file_path)
+    if directory != current_directory and os.path.exists(directory):
+        current_directory = directory
+        directory_entry.delete(0, tk.END)
+        directory_entry.insert(0, directory)
+        refresh_file_list()
+        
+        # Select the file in the listbox
+        filename = os.path.basename(file_path)
+        for i in range(file_listbox.size()):
+            if file_listbox.get(i) == filename:
+                file_listbox.selection_clear(0, tk.END)
+                file_listbox.selection_set(i)
+                file_listbox.see(i)
+                break
     
     # Start timing for image loading
     start_time = time.time()
@@ -146,6 +216,9 @@ def load_image(file_path):
         # Update the display and force a refresh
         window.update_idletasks()
         display_image()
+        
+        # Set the loaded image path
+        loaded_image_path = file_path
         
         # Automatically process the image for OCR
         process_image()
@@ -281,15 +354,14 @@ def show_status():
 
 def process_image():
     """
-    Processes the image selected in the entry widget using OCR.
+    Processes the loaded image using OCR.
     Extracts the text from the image and displays it in the text area.
     Handles potential errors during the OCR process.
     Includes timing information for the OCR processing.
     """
-    global original_image, extracted_text, image_ocr_time, image_file_name
+    global original_image, extracted_text, image_ocr_time, image_file_name, loaded_image_path
     
-    image_path = entry_image_path.get()
-    if not image_path:
+    if not loaded_image_path or not original_image:
         text_output.delete("1.0", tk.END)
         text_output.insert(tk.END, "Please select an image first.")
         return
@@ -298,10 +370,6 @@ def process_image():
     start_time = time.time()
     
     try:
-        # Use the cached original image if available
-        if original_image is None:
-            original_image = Image.open(image_path)
-            
         # Perform OCR on the image using pytesseract
         extracted_text = pytesseract.image_to_string(original_image)
         
@@ -313,7 +381,7 @@ def process_image():
         text_output.insert(tk.END, extracted_text)
         
         # Update status with file name and timing information
-        image_file_name = loaded_image_path.split('/')[-1]
+        image_file_name = os.path.basename(loaded_image_path)
         show_status()
     except FileNotFoundError:
         text_output.delete("1.0", tk.END)
@@ -342,60 +410,6 @@ def reformat_text(text):
     # Join lines back with newlines
     return ' '.join(normalized_words)
 
-# Create the main window
-window = TkinterDnD.Tk()
-window.title("Tess-a-shot")
-
-# Load settings before configuring the UI
-settings = load_settings()
-
-# Global variables for caching
-last_display_width = 0
-last_display_height = 0
-loaded_image_path = ""
-original_image = None
-last_resize_time = 0
-resize_delay = 300  # Milliseconds
-
-# Create main frame to organize the layout
-main_frame = tk.Frame(window)
-main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-
-# Create a PanedWindow for resizable frames
-paned_window = tk.PanedWindow(main_frame, orient=tk.HORIZONTAL, sashwidth=5, sashrelief=tk.RAISED)
-paned_window.pack(fill=tk.BOTH, expand=True)
-
-# Create left frame for image
-left_frame = tk.Frame(paned_window)
-left_frame.drop_target_register(DND_FILES)
-left_frame.dnd_bind("<<Drop>>", handle_drop)
-
-# Create right frame for text output
-right_frame = tk.Frame(paned_window)
-
-# Add the frames to the paned window
-paned_window.add(left_frame, width=400)  # Default width
-paned_window.add(right_frame, width=400)  # Default width
-
-# Top controls frame
-controls_frame = tk.Frame(window)
-controls_frame.pack(fill=tk.X, pady=(10, 0))
-
-# Label and entry for image path
-label_image_path = tk.Label(controls_frame, text="Image Path:")
-label_image_path.pack(side=tk.LEFT, padx=(10, 5))
-
-entry_image_path = tk.Entry(controls_frame, width=40)
-entry_image_path.pack(side=tk.LEFT, padx=5)
-
-# Button to select image
-button_select_image = tk.Button(controls_frame, text="Select Image", command=select_image)
-button_select_image.pack(side=tk.LEFT, padx=5)
-
-# Add buttons frame for text operations
-buttons_frame = tk.Frame(window)
-buttons_frame.pack(fill=tk.X, pady=5)
-
 # Function to copy selected text to clipboard
 def copy_to_clipboard():
     """Copy selected text to clipboard, or all text if none selected."""
@@ -419,17 +433,22 @@ def delete_image():
     """Delete the current image file from storage."""
     global loaded_image_path, original_image, last_display_width, last_display_height
     
-    image_path = entry_image_path.get()
-    if not image_path or not os.path.exists(image_path):
+    if not loaded_image_path or not os.path.exists(loaded_image_path):
         status_label.config(text="No valid image to delete.")
         return
     
     try:
-        os.remove(image_path)
-        status_label.config(text=f"Image deleted: {image_path}")
+        os.remove(loaded_image_path)
+        status_label.config(text=f"Image deleted: {loaded_image_path}")
+        
+        # Remove from listbox
+        filename = os.path.basename(loaded_image_path)
+        for i in range(file_listbox.size()):
+            if file_listbox.get(i) == filename:
+                file_listbox.delete(i)
+                break
         
         # Clear the UI elements
-        entry_image_path.delete(0, tk.END)
         text_output.delete("1.0", tk.END)
         image_label.config(image=None)
         image_label.image = None
@@ -441,46 +460,6 @@ def delete_image():
         last_display_height = 0
     except Exception as e:
         status_label.config(text=f"Error deleting image: {e}")
-
-# Copy button
-button_copy = tk.Button(buttons_frame, text="Copy Text", command=copy_to_clipboard)
-button_copy.pack(side=tk.LEFT, padx=10)
-
-# Delete button
-button_delete = tk.Button(buttons_frame, text="Delete Image File", command=delete_image, bg="#ffcccc")
-button_delete.pack(side=tk.LEFT, padx=10)
-
-# Status label
-status_label = tk.Label(window, text="No image loaded", bd=1, relief=tk.SUNKEN, anchor=tk.W)
-status_label.pack(side=tk.BOTTOM, fill=tk.X)
-
-# Image display area (left side)
-image_frame_label = tk.Label(left_frame, text="Image Preview:")
-image_frame_label.pack(pady=(0, 5), anchor=tk.W)
-
-image_label = tk.Label(left_frame, bg="lightgray", width=40, height=15)
-image_label.pack(fill=tk.BOTH, expand=True)
-
-# Text output area (right side)
-text_label = tk.Label(right_frame, text="Extracted Text:")
-text_label.pack(pady=(0, 5), anchor=tk.W)
-
-# Add checkboxes in a horizontal frame
-checkboxes_frame = tk.Frame(right_frame)
-checkboxes_frame.pack(anchor=tk.W, pady=(0, 5), fill=tk.X)
-
-# "Copy text on select" checkbox
-copy_on_select_var = tk.BooleanVar()
-copy_on_select_checkbox = tk.Checkbutton(checkboxes_frame, text="Copy text on select", variable=copy_on_select_var)
-copy_on_select_checkbox.pack(side=tk.LEFT, padx=(0, 10))
-
-# "Reformat copied lines" checkbox
-reformat_lines_var = tk.BooleanVar()
-reformat_lines_checkbox = tk.Checkbutton(checkboxes_frame, text="Reformat copied lines", variable=reformat_lines_var)
-reformat_lines_checkbox.pack(side=tk.LEFT)
-
-text_output = scrolledtext.ScrolledText(right_frame, width=40, height=15)
-text_output.pack(fill=tk.BOTH, expand=True)
 
 # Function to handle text selection
 def on_text_selection(event):
@@ -498,8 +477,137 @@ def on_text_selection(event):
         except tk.TclError:  # No selection
             pass  # Do nothing if no text is selected
 
+# Create the main window
+window = TkinterDnD.Tk()
+window.title("Tess-a-shot")
+
+# Load settings before configuring the UI
+settings = load_settings()
+
+# Global variables for caching
+last_display_width = 0
+last_display_height = 0
+loaded_image_path = ""
+original_image = None
+last_resize_time = 0
+resize_delay = 300  # Milliseconds
+
+# Create main frame to organize the layout
+main_frame = tk.Frame(window)
+main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+# Create a PanedWindow for resizable frames (left/right split)
+main_paned_window = tk.PanedWindow(main_frame, orient=tk.HORIZONTAL, sashwidth=5, sashrelief=tk.RAISED)
+main_paned_window.pack(fill=tk.BOTH, expand=True)
+
+# Create left frame for file list
+left_frame = tk.Frame(main_paned_window)
+
+# Create right frame for image preview and text output
+right_frame = tk.Frame(main_paned_window)
+
+# Add the frames to the main paned window
+main_paned_window.add(left_frame, width=250)  # Default width for file list
+main_paned_window.add(right_frame, width=650)  # Default width for preview/text
+
+# Create a vertical PanedWindow for the right frame (preview/text split)
+right_paned_window = tk.PanedWindow(right_frame, orient=tk.VERTICAL, sashwidth=5, sashrelief=tk.RAISED)
+right_paned_window.pack(fill=tk.BOTH, expand=True)
+
+# Create frames for the right paned window
+image_preview_frame = tk.Frame(right_paned_window)
+text_output_frame = tk.Frame(right_paned_window)
+
+# Add the frames to the right paned window
+right_paned_window.add(image_preview_frame, height=300)  # Default height for preview
+right_paned_window.add(text_output_frame, height=300)    # Default height for text
+
+# Top controls frame
+controls_frame = tk.Frame(window)
+controls_frame.pack(fill=tk.X, pady=(10, 0))
+
+# Label and entry for directory path
+label_directory = tk.Label(controls_frame, text="Directory:")
+label_directory.pack(side=tk.LEFT, padx=(10, 5))
+
+directory_entry = tk.Entry(controls_frame, width=50)
+directory_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+# Button to select directory
+button_select_directory = tk.Button(controls_frame, text="Browse...", command=select_directory)
+button_select_directory.pack(side=tk.LEFT, padx=5)
+
+# Button to refresh file list
+button_refresh = tk.Button(controls_frame, text="Refresh", command=refresh_file_list)
+button_refresh.pack(side=tk.LEFT, padx=5)
+
+# Left Frame Components (File List)
+file_list_label = tk.Label(left_frame, text="Image Files:")
+file_list_label.pack(pady=(0, 5), anchor=tk.W)
+
+# Create scrollable listbox for files
+file_list_frame = tk.Frame(left_frame)
+file_list_frame.pack(fill=tk.BOTH, expand=True)
+
+file_listbox = tk.Listbox(file_list_frame, selectmode=tk.SINGLE, exportselection=0)
+file_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+file_scrollbar = tk.Scrollbar(file_list_frame, orient=tk.VERTICAL, command=file_listbox.yview)
+file_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+file_listbox.config(yscrollcommand=file_scrollbar.set)
+
+# Bind file selection event
+file_listbox.bind('<<ListboxSelect>>', on_file_select)
+
+# Right Frame - Image Preview Components
+image_frame_label = tk.Label(image_preview_frame, text="Image Preview:")
+image_frame_label.pack(pady=(0, 5), anchor=tk.W)
+
+image_label = tk.Label(image_preview_frame, bg="lightgray")
+image_label.pack(fill=tk.BOTH, expand=True)
+
+# Make image_label a drop target
+image_label.drop_target_register(DND_FILES)
+image_label.dnd_bind("<<Drop>>", handle_drop)
+
+# Right Frame - Text Output Components
+text_output_controls = tk.Frame(text_output_frame)
+text_output_controls.pack(fill=tk.X, pady=(0, 5))
+
+text_label = tk.Label(text_output_controls, text="Extracted Text:")
+text_label.pack(side=tk.LEFT, pady=(0, 5))
+
+# Add buttons for text operations
+button_copy = tk.Button(text_output_controls, text="Copy Text", command=copy_to_clipboard)
+button_copy.pack(side=tk.RIGHT, padx=5)
+
+button_delete = tk.Button(text_output_controls, text="Delete Image File", command=delete_image, bg="#ffcccc")
+button_delete.pack(side=tk.RIGHT, padx=5)
+
+# Add checkboxes in a horizontal frame
+checkboxes_frame = tk.Frame(text_output_frame)
+checkboxes_frame.pack(anchor=tk.W, pady=(0, 5), fill=tk.X)
+
+# "Copy text on select" checkbox
+copy_on_select_var = tk.BooleanVar()
+copy_on_select_checkbox = tk.Checkbutton(checkboxes_frame, text="Copy text on select", variable=copy_on_select_var)
+copy_on_select_checkbox.pack(side=tk.LEFT, padx=(0, 10))
+
+# "Reformat copied lines" checkbox
+reformat_lines_var = tk.BooleanVar()
+reformat_lines_checkbox = tk.Checkbutton(checkboxes_frame, text="Reformat copied lines", variable=reformat_lines_var)
+reformat_lines_checkbox.pack(side=tk.LEFT)
+
+# Text output area
+text_output = scrolledtext.ScrolledText(text_output_frame)
+text_output.pack(fill=tk.BOTH, expand=True)
+
 # Bind the text selection event to the text_output widget
 text_output.bind("<<Selection>>", on_text_selection)
+
+# Status bar at the bottom
+status_label = tk.Label(window, text="No image loaded", bd=1, relief=tk.SUNKEN, anchor=tk.W)
+status_label.pack(side=tk.BOTTOM, fill=tk.X)
 
 # Override the on_resize function to include the PanedWindow
 def on_resize(event):
@@ -528,11 +636,20 @@ def on_resize(event):
 # Bind the resize event to the window
 window.bind("<Configure>", on_resize)
 
-# Set initial sash position to 50% of the window width
-def set_initial_sash_position():
+# Set initial sash position based on settings
+def set_initial_sash_positions():
     window_width = window.winfo_width()
-    if window_width > 1:  # Ensure window has been drawn
-        paned_window.sash_place(0, window_width // 2, 0)
+    window_height = window.winfo_height()
+    
+    if window_width > 1 and window_height > 1:  # Ensure window has been drawn
+        # Set main paned window sash position
+        left_width = int(window_width * settings["pane_ratio"])
+        main_paned_window.sash_place(0, left_width, 0)
+        
+        # Set right paned window sash position
+        right_height = int(window_height * settings["right_pane_ratio"])
+        right_paned_window.sash_place(0, 0, right_height)
+        
         window.after_cancel(set_sash_job)
 
 # Save settings on window close
@@ -546,7 +663,7 @@ window.protocol("WM_DELETE_WINDOW", on_closing)
 apply_settings()
 
 # Schedule the sash position setting after the window is drawn
-set_sash_job = window.after(100, set_initial_sash_position)
+set_sash_job = window.after(100, set_initial_sash_positions)
 
 # Run the application
 window.mainloop()
