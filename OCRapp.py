@@ -1,5 +1,6 @@
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog
+# , ttk
 from tkinter import scrolledtext
 from tkinterdnd2 import DND_FILES, TkinterDnD
 import pytesseract
@@ -8,7 +9,11 @@ import os
 import platform
 import pyperclip
 import time
-import json
+
+import ctx
+
+# Load settings from the configuration file
+from settings import load_settings, save_settings, apply_settings
 
 if platform.system() == "Windows":
     pytesseract.pytesseract.tesseract_cmd = 'Z:\\dev\\vcpkg\\installed\\x64-windows-static\\tools\\tesseract\\tesseract.exe'
@@ -19,115 +24,15 @@ image_ocr_time = 0.0
 image_file_name = ""
 extracted_text = ""
 error_message = ""
-current_directory = ""
-
-# Configuration file path
-CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".tessashot_config.json")
-
-# Default settings
-DEFAULT_SETTINGS = {
-    "window": {
-        "width": 900,
-        "height": 700,
-        "x": None,
-        "y": None
-    },
-    "pane_ratio": 0.3,  # 30% for file list, 70% for preview/text
-    "right_pane_ratio": 0.5,  # 50% split for image preview and text output
-    "options": {
-        "copy_on_select": False,
-        "reformat_lines": False
-    },
-    "last_directory": ""
-}
-
-# Global settings variable
-settings = DEFAULT_SETTINGS.copy()
-
-def save_settings():
-    """Save current application settings to the config file"""
-    global settings
-    
-    # Update window geometry in settings
-    settings["window"]["width"] = window.winfo_width()  
-    settings["window"]["height"] = window.winfo_height()
-    settings["window"]["x"] = window.winfo_x()
-    settings["window"]["y"] = window.winfo_y()
-    
-    # Calculate pane ratio based on current frame widths
-    if main_frame.winfo_width() > 0:  # Prevent division by zero
-        settings["pane_ratio"] = left_frame.winfo_width() / main_frame.winfo_width()
-    
-    # Calculate right pane ratio
-    if right_frame.winfo_height() > 0:  # Prevent division by zero
-        settings["right_pane_ratio"] = image_preview_frame.winfo_height() / right_frame.winfo_height()
-    
-    # Update options settings
-    settings["options"]["copy_on_select"] = copy_on_select_var.get()
-    settings["options"]["reformat_lines"] = reformat_lines_var.get()
-    
-    # Save last directory
-    settings["last_directory"] = current_directory
-    
-    # Write to file
-    try:
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(settings, f, indent=4)
-    except Exception as e:
-        print(f"Error saving settings: {e}")
-
-def load_settings():
-    """Load application settings from the config file"""
-    global settings
-    
-    try:
-        # Check if the config file exists
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'r') as f:
-                loaded_settings = json.load(f)
-                # Update our settings with loaded values
-                settings.update(loaded_settings)
-    except Exception as e:
-        print(f"Error loading settings: {e}")
-        
-    return settings
-
-def apply_settings():
-    """Apply loaded settings to the application"""
-    global settings, current_directory
-    
-    # Set window size and position
-    width = settings["window"]["width"]
-    height = settings["window"]["height"]
-    x = settings["window"]["x"]
-    y = settings["window"]["y"]
-    
-    # Set window geometry
-    geometry = f"{width}x{height}"
-    if x is not None and y is not None:
-        geometry += f"+{x}+{y}"
-    window.geometry(geometry)
-    
-    # Set checkbox values
-    copy_on_select_var.set(settings["options"]["copy_on_select"])
-    reformat_lines_var.set(settings["options"]["reformat_lines"])
-    
-    # Set last used directory
-    current_directory = settings["last_directory"]
-    if current_directory and os.path.exists(current_directory):
-        directory_entry.delete(0, tk.END)
-        directory_entry.insert(0, current_directory)
-        refresh_file_list()
 
 def select_directory():
     """Opens a file dialog to select a directory."""
-    global current_directory
     
     directory_path = filedialog.askdirectory()
     if not directory_path:
         return
         
-    current_directory = directory_path
+    ctx.current_directory = directory_path
     directory_entry.delete(0, tk.END)
     directory_entry.insert(0, directory_path)
     
@@ -136,19 +41,18 @@ def select_directory():
 
 def refresh_file_list():
     """Refreshes the file list based on the current directory."""
-    global current_directory
     
     # Clear the current file list
     file_listbox.delete(0, tk.END)
     
-    if not current_directory or not os.path.exists(current_directory):
+    if not ctx.current_directory or not os.path.exists(ctx.current_directory):
         return
     
     # Get all image files in the directory
     image_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif')
     try:
-        files = [f for f in os.listdir(current_directory) 
-                if os.path.isfile(os.path.join(current_directory, f)) 
+        files = [f for f in os.listdir(ctx.current_directory) 
+                if os.path.isfile(os.path.join(ctx.current_directory, f)) 
                 and f.lower().endswith(image_extensions)]
         
         # Sort files alphabetically
@@ -159,7 +63,7 @@ def refresh_file_list():
             file_listbox.insert(tk.END, file)
             
         # Update status
-        status_label.config(text=f"Found {len(files)} image files in {current_directory}")
+        status_label.config(text=f"Found {len(files)} image files in {ctx.current_directory}")
     except Exception as e:
         status_label.config(text=f"Error reading directory: {e}")
 
@@ -170,7 +74,7 @@ def on_file_select(event):
         return
         
     filename = file_listbox.get(selection[0])
-    file_path = os.path.join(current_directory, filename)
+    file_path = os.path.join(ctx.current_directory, filename)
     
     # Load the selected image
     load_image(file_path)
@@ -179,12 +83,12 @@ def load_image(file_path):
     """
     Loads an image from the specified file path, updates the UI, and processes the image for OCR.
     """
-    global loaded_image_path, original_image, image_load_time, current_directory
+    global loaded_image_path, original_image, image_load_time
 
     # Update the directory entry if it's from a different directory
     directory = os.path.dirname(file_path)
-    if directory != current_directory and os.path.exists(directory):
-        current_directory = directory
+    if directory != ctx.current_directory and os.path.exists(directory):
+        ctx.current_directory = directory
         directory_entry.delete(0, tk.END)
         directory_entry.insert(0, directory)
         refresh_file_list()
@@ -478,7 +382,7 @@ def on_text_selection(event):
             pass  # Do nothing if no text is selected
 
 # Create the main window
-window = TkinterDnD.Tk()
+ctx.window = window = TkinterDnD.Tk()
 window.title("Tess-a-shot")
 
 # Load settings before configuring the UI
@@ -493,7 +397,7 @@ last_resize_time = 0
 resize_delay = 300  # Milliseconds
 
 # Create main frame to organize the layout
-main_frame = tk.Frame(window)
+ctx.main_frame = main_frame = tk.Frame(window)
 main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
 # Create a PanedWindow for resizable frames (left/right split)
@@ -501,10 +405,10 @@ main_paned_window = tk.PanedWindow(main_frame, orient=tk.HORIZONTAL, sashwidth=5
 main_paned_window.pack(fill=tk.BOTH, expand=True)
 
 # Create left frame for file list
-left_frame = tk.Frame(main_paned_window)
+ctx.left_frame = left_frame = tk.Frame(main_paned_window)
 
 # Create right frame for image preview and text output
-right_frame = tk.Frame(main_paned_window)
+ctx.right_frame = right_frame = tk.Frame(main_paned_window)
 
 # Add the frames to the main paned window
 main_paned_window.add(left_frame, width=250)  # Default width for file list
@@ -515,7 +419,7 @@ right_paned_window = tk.PanedWindow(right_frame, orient=tk.VERTICAL, sashwidth=5
 right_paned_window.pack(fill=tk.BOTH, expand=True)
 
 # Create frames for the right paned window
-image_preview_frame = tk.Frame(right_paned_window)
+ctx.image_preview_frame = image_preview_frame = tk.Frame(right_paned_window)
 text_output_frame = tk.Frame(right_paned_window)
 
 # Add the frames to the right paned window
@@ -530,7 +434,7 @@ controls_frame.pack(fill=tk.X, pady=(10, 0))
 label_directory = tk.Label(controls_frame, text="Directory:")
 label_directory.pack(side=tk.LEFT, padx=(10, 5))
 
-directory_entry = tk.Entry(controls_frame, width=50)
+ctx.directory_entry = directory_entry = tk.Entry(controls_frame, width=50)
 directory_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
 # Button to select directory
@@ -589,12 +493,12 @@ checkboxes_frame = tk.Frame(text_output_frame)
 checkboxes_frame.pack(anchor=tk.W, pady=(0, 5), fill=tk.X)
 
 # "Copy text on select" checkbox
-copy_on_select_var = tk.BooleanVar()
+ctx.copy_on_select_var = copy_on_select_var = tk.BooleanVar()
 copy_on_select_checkbox = tk.Checkbutton(checkboxes_frame, text="Copy text on select", variable=copy_on_select_var)
 copy_on_select_checkbox.pack(side=tk.LEFT, padx=(0, 10))
 
 # "Reformat copied lines" checkbox
-reformat_lines_var = tk.BooleanVar()
+ctx.reformat_lines_var = reformat_lines_var = tk.BooleanVar()
 reformat_lines_checkbox = tk.Checkbutton(checkboxes_frame, text="Reformat copied lines", variable=reformat_lines_var)
 reformat_lines_checkbox.pack(side=tk.LEFT)
 
@@ -651,6 +555,8 @@ def set_initial_sash_positions():
         right_paned_window.sash_place(0, 0, right_height)
         
         window.after_cancel(set_sash_job)
+
+ctx.refresh_file_list = refresh_file_list
 
 # Save settings on window close
 def on_closing():
