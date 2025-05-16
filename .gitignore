@@ -172,3 +172,11 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# file synchronization
+.sync-exclude.lst
+backup/
+archive/
+
+# custom files
+TODO.md
