@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import scrolledtext
 from tkinterdnd2 import DND_FILES, TkinterDnD
 import pytesseract
-from PIL import Image, ImageTk
 import os
 import platform
 import pyperclip
@@ -11,90 +10,17 @@ import time
 import settings
 import ctx_ui
 import ui_ops
+import file_ops
+import image_ops
 
 if platform.system() == "Windows":
     pytesseract.pytesseract.tesseract_cmd = 'Z:\\dev\\vcpkg\\installed\\x64-windows-static\\tools\\tesseract\\tesseract.exe'
-
-image_load_time = 0.0
-image_resize_time = 0.0
-image_ocr_time = 0.0
-image_file_name = ""
-extracted_text = ""
-error_message = ""
-
-def on_file_select(event):
-    """Handles file selection from the listbox."""
-    selection = file_listbox.curselection()
-    if not selection:
-        return
-        
-    filename = file_listbox.get(selection[0])
-    file_path = os.path.join(settings.current_directory, filename)
-    
-    # Load the selected image
-    load_image(file_path)
-
-def load_image(file_path):
-    """
-    Loads an image from the specified file path, updates the UI, and processes the image for OCR.
-    """
-    global loaded_image_path, original_image, image_load_time
-
-    # Update the directory entry if it's from a different directory
-    directory = os.path.dirname(file_path)
-    if directory != settings.current_directory and os.path.exists(directory):
-        settings.current_directory = directory
-        directory_entry.delete(0, tk.END)
-        directory_entry.insert(0, directory)
-        ui_ops.refresh_file_list()
-        
-        # Select the file in the listbox
-        filename = os.path.basename(file_path)
-        for i in range(file_listbox.size()):
-            if file_listbox.get(i) == filename:
-                file_listbox.selection_clear(0, tk.END)
-                file_listbox.selection_set(i)
-                file_listbox.see(i)
-                break
-    
-    # Start timing for image loading
-    start_time = time.time()
-    
-    try:
-        original_image = Image.open(file_path)
-        
-        # Force display update immediately
-        # First reset dimensions to force redraw
-        global last_display_width, last_display_height
-        last_display_width = 0
-        last_display_height = 0
-        
-        # Calculate loading time
-        image_load_time = (time.time() - start_time) * 1000  # Convert to milliseconds
-        
-        # Update the display and force a refresh
-        window.update_idletasks()
-        display_image()
-        
-        # Set the loaded image path
-        loaded_image_path = file_path
-        
-        # Automatically process the image for OCR
-        process_image()
-    except Exception as e:
-        error_message = f"Error loading image: {e}"
-        show_status()
-        image_label.config(image=None)
-        image_label.image = None
-        original_image = None
 
 def handle_drop(event):
     """
     Handles files dropped onto the application.
     Extracts the file path from the drop event and loads the image.
     """
-    global error_message
-
     # Get the file path from the drop event
     file_path = event.data
     
@@ -109,147 +35,10 @@ def handle_drop(event):
     # Check if it's an image file (simple check, could be expanded)
     image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']
     if any(file_path.lower().endswith(ext) for ext in image_extensions):
-        load_image(file_path)
+        image_ops.load_image(file_path)
     else:
-        error_message = "Dropped file is not a supported image format"
+        ui_ops.error_message = "Dropped file is not a supported image format"
 
-def display_image(force=False):
-    """
-    Displays the cached original image in the image_label.
-    Dynamically resizes the image to fit the available display area while maintaining aspect ratio.
-    Uses caching to prevent unnecessary resizing operations.
-    
-    Args:
-        force (bool): If True, forces the image to be redrawn regardless of dimension changes
-    """
-    global last_display_width, last_display_height, original_image, loaded_image_path, image_resize_time
-    
-    if original_image is None:
-        return
-        
-    try:
-        # Start timing for resize operation
-        start_time = time.time()
-        
-        # Get current display area dimensions
-        display_width = image_label.winfo_width()
-        display_height = image_label.winfo_height()
-        
-        # Use default dimensions if the widget hasn't been rendered yet
-        if display_width <= 1:
-            display_width = 300
-        if display_height <= 1:
-            display_height = 300
-            
-        # Check if dimensions have changed enough to warrant a resize
-        # Small changes (less than 5 pixels) don't trigger a resize to improve performance
-        if not force and (abs(display_width - last_display_width) < 5 and 
-            abs(display_height - last_display_height) < 5 and 
-            hasattr(image_label, 'image') and 
-            image_label.image is not None):
-            return
-            
-        # Update cached dimensions
-        last_display_width = display_width
-        last_display_height = display_height
-        
-        # Get original image dimensions
-        width, height = original_image.size
-        
-        # Calculate the new dimensions to fit the display area
-        # while maintaining the aspect ratio
-        if width / height > display_width / display_height:
-            # Image is wider than the display area (relative to height)
-            new_width = display_width
-            new_height = int(height * (display_width / width))
-        else:
-            # Image is taller than the display area (relative to width)
-            new_height = display_height
-            new_width = int(width * (display_height / height))
-        
-        # Resize the image
-        img_resized = original_image.resize((new_width, new_height), Image.LANCZOS)
-        
-        # Convert to PhotoImage for Tkinter
-        photo = ImageTk.PhotoImage(img_resized)
-        
-        # Update the image label
-        image_label.config(image=photo)
-        image_label.image = photo  # Keep a reference to prevent garbage collection
-        
-        # Calculate resize time
-        image_resize_time = (time.time() - start_time) * 1000  # Convert to milliseconds
-        
-        if force:
-            # For forced updates, keep the existing status message
-            pass
-        else:
-            # Update status label with dimensions info and timing
-            show_status()
-            
-    except Exception as e:
-        status_label.config(text=f"Error displaying image: {e}")
-        image_label.config(image=None)
-        image_label.image = None
-
-def show_status():
-    """
-    Displays the current status and statistics of the image processing.
-    Shows error information or the time taken for loading, resizing, and OCR processing.
-    """
-    global image_load_time, image_resize_time, image_ocr_time, loaded_image_path
-    
-    stats = "";
-    
-    if(image_file_name != ""):
-        stats += f"Image [{image_file_name}] loaded in {image_load_time:.2f}ms | Resized: {image_resize_time:.2f}ms | OCR: {image_ocr_time:.2f}ms - {len(extracted_text)} characters"
-    
-    if error_message:
-        stats = f"Error: {error_message}"
-    
-    if stats != "":
-        status_label.config(text=stats)
-
-
-def process_image():
-    """
-    Processes the loaded image using OCR.
-    Extracts the text from the image and displays it in the text area.
-    Handles potential errors during the OCR process.
-    Includes timing information for the OCR processing.
-    """
-    global original_image, extracted_text, image_ocr_time, image_file_name, loaded_image_path
-    
-    if not loaded_image_path or not original_image:
-        text_output.delete("1.0", tk.END)
-        text_output.insert(tk.END, "Please select an image first.")
-        return
-
-    # Start timing for OCR processing
-    start_time = time.time()
-    
-    try:
-        # Perform OCR on the image using pytesseract
-        extracted_text = pytesseract.image_to_string(original_image)
-        
-        # Calculate OCR processing time
-        image_ocr_time = (time.time() - start_time) * 1000  # Convert to milliseconds
-        
-        # Clear previous text and insert the new extracted text
-        text_output.delete("1.0", tk.END)
-        text_output.insert(tk.END, extracted_text)
-        
-        # Update status with file name and timing information
-        image_file_name = os.path.basename(loaded_image_path)
-        show_status()
-    except FileNotFoundError:
-        text_output.delete("1.0", tk.END)
-        text_output.insert(tk.END, "Error: Image file not found.")
-        show_status()
-    except Exception as e:
-        text_output.delete("1.0", tk.END)
-        text_output.insert(tk.END, f"Error during OCR processing: {e}")
-        show_status()
 
 def reformat_text(text):
     """
@@ -273,9 +62,9 @@ def reformat_text(text):
 def copy_to_clipboard():
     """Copy selected text to clipboard, or all text if none selected."""
     try:
-        selected_text = text_output.get(tk.SEL_FIRST, tk.SEL_LAST)
+        selected_text = ctx_ui.text_output.get(tk.SEL_FIRST, tk.SEL_LAST)
     except tk.TclError:  # No selection
-        selected_text = text_output.get("1.0", tk.END)
+        selected_text = ctx_ui.text_output.get("1.0", tk.END)
     
     if selected_text:
         # Apply reformatting if the option is checked
@@ -287,45 +76,12 @@ def copy_to_clipboard():
     else:
         status_label.config(text="No text to copy.")
 
-# Function to delete the current image file
-def delete_image():
-    """Delete the current image file from storage."""
-    global loaded_image_path, original_image, last_display_width, last_display_height
-    
-    if not loaded_image_path or not os.path.exists(loaded_image_path):
-        status_label.config(text="No valid image to delete.")
-        return
-    
-    try:
-        os.remove(loaded_image_path)
-        status_label.config(text=f"Image deleted: {loaded_image_path}")
-        
-        # Remove from listbox
-        filename = os.path.basename(loaded_image_path)
-        for i in range(file_listbox.size()):
-            if file_listbox.get(i) == filename:
-                file_listbox.delete(i)
-                break
-        
-        # Clear the UI elements
-        text_output.delete("1.0", tk.END)
-        image_label.config(image=None)
-        image_label.image = None
-        
-        # Reset cache variables
-        loaded_image_path = ""
-        original_image = None
-        last_display_width = 0
-        last_display_height = 0
-    except Exception as e:
-        status_label.config(text=f"Error deleting image: {e}")
-
 # Function to handle text selection
 def on_text_selection(event):
     """Copy selected text to clipboard when text is selected and checkbox is checked"""
     if copy_on_select_var.get():
         try:
-            selected_text = text_output.get(tk.SEL_FIRST, tk.SEL_LAST)
+            selected_text = ctx_ui.text_output.get(tk.SEL_FIRST, tk.SEL_LAST)
             if selected_text:
                 # Apply reformatting if the option is checked
                 if reformat_lines_var.get():
@@ -419,18 +175,18 @@ file_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 file_listbox.config(yscrollcommand=file_scrollbar.set)
 
 # Bind file selection event
-file_listbox.bind('<<ListboxSelect>>', on_file_select)
+file_listbox.bind('<<ListboxSelect>>', file_ops.on_file_select)
 
 # Right Frame - Image Preview Components
 image_frame_label = tk.Label(image_preview_frame, text="Image Preview:")
 image_frame_label.pack(pady=(0, 5), anchor=tk.W)
 
-image_label = tk.Label(image_preview_frame, bg="lightgray")
-image_label.pack(fill=tk.BOTH, expand=True)
+ctx_ui.image_label = tk.Label(image_preview_frame, bg="lightgray")
+ctx_ui.image_label.pack(fill=tk.BOTH, expand=True)
 
 # Make image_label a drop target
-image_label.drop_target_register(DND_FILES)
-image_label.dnd_bind("<<Drop>>", handle_drop)
+ctx_ui.image_label.drop_target_register(DND_FILES)
+ctx_ui.image_label.dnd_bind("<<Drop>>", handle_drop)
 
 # Right Frame - Text Output Components
 text_output_controls = tk.Frame(text_output_frame)
@@ -443,7 +199,7 @@ text_label.pack(side=tk.LEFT, pady=(0, 5))
 button_copy = tk.Button(text_output_controls, text="Copy Text", command=copy_to_clipboard)
 button_copy.pack(side=tk.RIGHT, padx=5)
 
-button_delete = tk.Button(text_output_controls, text="Delete Image File", command=delete_image, bg="#ffcccc")
+button_delete = tk.Button(text_output_controls, text="Delete Image File", command=image_ops.delete_image, bg="#ffcccc")
 button_delete.pack(side=tk.RIGHT, padx=5)
 
 # Add checkboxes in a horizontal frame
@@ -461,11 +217,11 @@ reformat_lines_checkbox = tk.Checkbutton(checkboxes_frame, text="Reformat copied
 reformat_lines_checkbox.pack(side=tk.LEFT)
 
 # Text output area
-text_output = scrolledtext.ScrolledText(text_output_frame)
-text_output.pack(fill=tk.BOTH, expand=True)
+ctx_ui.text_output = scrolledtext.ScrolledText(text_output_frame)
+ctx_ui.text_output.pack(fill=tk.BOTH, expand=True)
 
 # Bind the text selection event to the text_output widget
-text_output.bind("<<Selection>>", on_text_selection)
+ctx_ui.text_output.bind("<<Selection>>", on_text_selection)
 
 # Status bar at the bottom
 ctx_ui.status_label = status_label = tk.Label(window, text="No image loaded", bd=1, relief=tk.SUNKEN, anchor=tk.W)
@@ -493,7 +249,7 @@ def on_resize(event):
         pass
     
     # Schedule a new resize task with delay
-    window._resize_job = window.after(resize_delay, display_image)
+    window._resize_job = window.after(resize_delay, image_ops.display_image)
 
 # Bind the resize event to the window
 window.bind("<Configure>", on_resize)
