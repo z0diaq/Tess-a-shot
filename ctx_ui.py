@@ -14,3 +14,5 @@ refresh_file_list = None
 file_listbox = None
 status_label = None
 image_label = None
+main_paned_window = None
+set_sash_job = None

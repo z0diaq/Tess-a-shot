@@ -14,19 +14,9 @@ image_load_time = 0
 image_resize_time = 0
 image_ocr_time = 0
 image_file_name = None
-extracted_text = None
+extracted_text = ""
+last_resize_time = 0
 
-def on_file_select(event):
-    """Handles file selection from the listbox."""
-    selection = ctx_ui.file_listbox.curselection()
-    if not selection:
-        return
-        
-    filename = ctx_ui.file_listbox.get(selection[0])
-    file_path = os.path.join(settings.current_directory, filename)
-    
-    # Load the selected image
-    load_image(file_path)
 
 def load_image(file_path):
     """
@@ -76,7 +66,7 @@ def load_image(file_path):
         # Automatically process the image for OCR
         process_image()
     except Exception as e:
-        ui_ops.on_error(f"Error loading image: {e}")
+        ui_ops.set_status(f"Error loading image: {e}")
         ctx_ui.image_label.config(image=None)
         ctx_ui.image_label.image = None
         original_image = None
@@ -97,7 +87,6 @@ def display_image(force=False):
         
     try:
         ui_ops.clear_error()
-        
         # Start timing for resize operation
         start_time = time.time()
         
@@ -158,7 +147,7 @@ def display_image(force=False):
             ui_ops.show_status()
             
     except Exception as e:
-        ui_ops.on_error(f"Error displaying image: {e}")
+        ui_ops.set_status(f"Error displaying image: {e}")
         ctx_ui.image_label.config(text=f"Error displaying image: {e}")
         ctx_ui.image_label.config(image=None)
         ctx_ui.image_label.image = None
@@ -211,12 +200,12 @@ def delete_image():
     global loaded_image_path, original_image, last_display_width, last_display_height
     
     if not loaded_image_path or not os.path.exists(loaded_image_path):
-        ui_ops.on_error("No valid image to delete.")
+        ui_ops.set_status("No valid image to delete.")
         return
     
     try:
         os.remove(loaded_image_path)
-        ui_ops.on_error(f"Image deleted: {loaded_image_path}")
+        ui_ops.set_status(f"Image deleted: {loaded_image_path}")
         
         # Remove from listbox
         filename = os.path.basename(loaded_image_path)
@@ -236,4 +225,4 @@ def delete_image():
         last_display_width = 0
         last_display_height = 0
     except Exception as e:
-        ui_ops.on_error(f"Error deleting image: {e}")
+        ui_ops.set_status(f"Error deleting image: {e}")
