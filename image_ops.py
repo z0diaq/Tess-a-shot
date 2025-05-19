@@ -17,6 +17,15 @@ image_file_name = None
 extracted_text = ""
 last_resize_time = 0
 
+# Variables for region selection
+selection_start_x = 0
+selection_start_y = 0
+selection_rect = None
+selection_coords = [0, 0, 0, 0]  # [x1, y1, x2, y2] in original image coordinates
+
+img_resized = None
+display_scale_factor = (1, 1)  # (width_scale, height_scale)
+selection_canvas = None
 
 def load_image(file_path):
     """
@@ -55,6 +64,15 @@ def load_image(file_path):
         
         # Calculate loading time
         image_load_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+
+        # Reset or adjust selection coordinates for the new image
+        if not ctx_ui.remember_region_var.get() or selection_coords == [0, 0, 0, 0]:
+            # If not remembering region or if no region was selected, set to full image
+            width, height = original_image.size
+            selection_coords = [0, 0, width, height]
+        else:
+            # Ensure coordinates don't go beyond the new image boundaries
+            adjust_selection_to_image_bounds()
         
         # Update the display and force a refresh
         ctx_ui.window.update_idletasks()
@@ -80,7 +98,7 @@ def display_image(force=False):
     Args:
         force (bool): If True, forces the image to be redrawn regardless of dimension changes
     """
-    global last_display_width, last_display_height, original_image, loaded_image_path, image_resize_time
+    global last_display_width, last_display_height, original_image, loaded_image_path, image_resize_time, display_scale_factor
     
     if original_image is None:
         return
@@ -163,7 +181,7 @@ def process_image():
 
     ui_ops.clear_error()
     
-    if not loaded_image_path or not original_image:
+    if not loaded_image_path or not original_image or selection_coords == [0, 0, 0, 0]:
         ctx_ui.text_output.delete("1.0", tk.END)
         ctx_ui.text_output.insert(tk.END, "Please select an image first.")
         return
@@ -172,8 +190,16 @@ def process_image():
     start_time = time.time()
     
     try:
-        # Perform OCR on the image using pytesseract
-        extracted_text = pytesseract.image_to_string(original_image)
+        # Extract the selected region from the original image
+        x1, y1, x2, y2 = selection_coords
+        region_width = x2 - x1
+        region_height = y2 - y1
+        
+        # Crop the image to the selected region
+        region_image = original_image.crop((x1, y1, x2, y2))
+        
+        # Perform OCR on the selected region using pytesseract
+        extracted_text = pytesseract.image_to_string(region_image)
         
         # Calculate OCR processing time
         image_ocr_time = (time.time() - start_time) * 1000  # Convert to milliseconds
@@ -182,6 +208,8 @@ def process_image():
         ctx_ui.text_output.delete("1.0", tk.END)
         ctx_ui.text_output.insert(tk.END, extracted_text)
         
+        # TODO: add status message about region based processing
+
         # Update status with file name and timing information
         image_file_name = os.path.basename(loaded_image_path)
         ui_ops.show_status()
@@ -226,3 +254,139 @@ def delete_image():
         last_display_height = 0
     except Exception as e:
         ui_ops.set_status(f"Error deleting image: {e}")
+
+def adjust_selection_to_image_bounds():
+    """
+    Adjusts the selection coordinates to ensure they stay within the image boundaries.
+    """
+
+    if original_image is None:
+        return
+        
+    width, height = original_image.size
+    selection_coords[0] = max(0, min(selection_coords[0], width - 1))
+    selection_coords[1] = max(0, min(selection_coords[1], height - 1))
+    selection_coords[2] = max(selection_coords[0] + 1, min(selection_coords[2], width))
+    selection_coords[3] = max(selection_coords[1] + 1, min(selection_coords[3], height))
+
+def update_selection_rectangle():
+    """
+    Updates the selection rectangle on the canvas to match the current selection coordinates.
+    """
+    global selection_coords, display_scale_factor, selection_rect, selection_canvas
+    
+    if original_image is None:
+        return
+    
+    # If canvas doesn't exist yet, create it
+    if not hasattr(ctx_ui.image_label, 'selection_canvas'):
+        create_selection_canvas()
+        return
+    
+    # Convert original image coordinates to display coordinates
+    x1 = int(selection_coords[0] * display_scale_factor[0])
+    y1 = int(selection_coords[1] * display_scale_factor[1])
+    x2 = int(selection_coords[2] * display_scale_factor[0])
+    y2 = int(selection_coords[3] * display_scale_factor[1])
+    
+    # Update or create the selection rectangle
+    if selection_rect:
+        selection_canvas.coords(selection_rect, x1, y1, x2, y2)
+    else:
+        selection_rect = selection_canvas.create_rectangle(
+            x1, y1, x2, y2, 
+            outline="blue", 
+            width=2,
+            dash=(5, 5)
+        )
+
+def create_selection_canvas():
+    """
+    Creates a transparent canvas over the image label for drawing the selection rectangle.
+    """
+    global selection_canvas, selection_rect
+    
+    # Create a canvas that overlays the image label
+    selection_canvas = tk.Canvas(
+        ctx_ui.image_preview_frame, 
+        highlightthickness=0,
+        bg="systemTransparent"  # Transparent background
+    )
+    selection_canvas.place(
+        x=ctx_ui.image_label.winfo_x(),
+        y=ctx_ui.image_label.winfo_y(),
+        width=ctx_ui.image_label.winfo_width(),
+        height=ctx_ui.image_label.winfo_height()
+    )
+    
+    # Store canvas in image_label for easy access
+    ctx_ui.image_label.selection_canvas = selection_canvas
+    
+    # Set up mouse event bindings for selection
+    selection_canvas.bind("<ButtonPress-1>", on_selection_start)
+    selection_canvas.bind("<B1-Motion>", on_selection_motion)
+    selection_canvas.bind("<ButtonRelease-1>", on_selection_end)
+
+def on_selection_start(event):
+    """Handle the start of a rectangle selection."""
+    global selection_start_x, selection_start_y, selection_rect
+    
+    selection_start_x, selection_start_y = event.x, event.y
+    
+    # Create or update selection rectangle
+    if selection_rect:
+        selection_canvas.coords(selection_rect, event.x, event.y, event.x, event.y)
+    else:
+        selection_rect = selection_canvas.create_rectangle(
+            event.x, event.y, event.x, event.y, 
+            outline="blue", 
+            width=2,
+            dash=(5, 5)
+        )
+
+def on_selection_motion(event):
+    """Handle the mouse movement during selection."""
+    global selection_rect
+    if selection_rect:
+        selection_canvas.coords(selection_rect, selection_start_x, selection_start_y, event.x, event.y)
+
+def on_selection_end(event):
+    """
+    Finalize the selection rectangle and update the selection coordinates.
+    Then process the selected region.
+    """
+    global selection_coords, selection_rect, display_scale_factor
+    
+    if not selection_rect or not original_image:
+        return
+    
+    # Get the rectangle coordinates in display space
+    x1, y1, x2, y2 = selection_canvas.coords(selection_rect)
+    
+    # Ensure x1 < x2 and y1 < y2
+    if x1 > x2:
+        x1, x2 = x2, x1
+    if y1 > y2:
+        y1, y2 = y2, y1
+    
+    # Convert display coordinates back to original image coordinates
+    orig_x1 = int(x1 / display_scale_factor[0])
+    orig_y1 = int(y1 / display_scale_factor[1])
+    orig_x2 = int(x2 / display_scale_factor[0])
+    orig_y2 = int(y2 / display_scale_factor[1])
+    
+    # Ensure coordinates are within image bounds
+    width, height = original_image.size
+    orig_x1 = max(0, min(orig_x1, width - 1))
+    orig_y1 = max(0, min(orig_y1, height - 1))
+    orig_x2 = max(orig_x1 + 1, min(orig_x2, width))
+    orig_y2 = max(orig_y1 + 1, min(orig_y2, height))
+    
+    # Update selection coordinates
+    selection_coords = [orig_x1, orig_y1, orig_x2, orig_y2]
+    
+    # Update the selection rectangle
+    selection_canvas.coords(selection_rect, x1, y1, x2, y2)
+    
+    # Process the selected region
+    process_image()

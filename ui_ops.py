@@ -1,4 +1,4 @@
-from tkinter import filedialog
+from tkinter import filedialog, Canvas
 import tkinter as tk
 import os
 import time
@@ -10,7 +10,6 @@ import image_ops
 status_message = ""
 
 resize_delay = 300  # Milliseconds
-
 
 def on_file_select(event):
     """Handles file selection from the listbox."""
@@ -145,6 +144,12 @@ def on_resize(event):
     
     # Schedule a new resize task with delay
     ctx_ui.window._resize_job = ctx_ui.window.after(resize_delay, image_ops.display_image)
+
+    # Update the selection canvas position and size
+    if hasattr(ctx_ui.image_label, 'selection_canvas') and image_ops.selection_canvas:
+        image_ops.selection_canvas.place(
+            width=ctx_ui.image_label.winfo_width(),
+            height=ctx_ui.image_label.winfo_height())
 
 def on_right_pane_drag(event):
     # Cancel any pending resize tasks
