@@ -128,8 +128,8 @@ def setup():
     reformat_lines_checkbox.pack(side=tk.LEFT)
 
     # "Remember region" checkbox
-    remember_region_var = tk.BooleanVar()
-    remember_region_checkbox = tk.Checkbutton(checkboxes_frame, text="Remember region", variable=remember_region_var)
+    ctx_ui.remember_region_var = tk.BooleanVar()
+    remember_region_checkbox = tk.Checkbutton(checkboxes_frame, text="Remember region", variable=ctx_ui.remember_region_var)
     remember_region_checkbox.pack(side=tk.LEFT, padx=(10, 0))
 
     # Text output area

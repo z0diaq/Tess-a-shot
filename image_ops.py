@@ -31,7 +31,7 @@ def load_image(file_path):
     """
     Loads an image from the specified file path, updates the UI, and processes the image for OCR.
     """
-    global loaded_image_path, original_image, image_load_time
+    global loaded_image_path, original_image, image_load_time, selection_coords
 
     # Update the directory entry if it's from a different directory
     directory = os.path.dirname(file_path)
