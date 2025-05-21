@@ -92,12 +92,12 @@ def setup():
     image_frame_label = tk.Label(ctx_ui.image_preview_frame, text="Image Preview:")
     image_frame_label.pack(pady=(0, 5), anchor=tk.W)
 
-    ctx_ui.image_label = tk.Label(ctx_ui.image_preview_frame, bg="lightgray")
-    ctx_ui.image_label.pack(fill=tk.BOTH, expand=True)
+    ctx_ui.image_canvas = tk.Canvas(ctx_ui.image_preview_frame, bg="lightgray")
+    ctx_ui.image_canvas.pack(fill=tk.BOTH, expand=True)
 
-    # Make image_label a drop target
-    ctx_ui.image_label.drop_target_register(DND_FILES)
-    ctx_ui.image_label.dnd_bind("<<Drop>>", ui_ops.handle_drop)
+    ctx_ui.image_canvas.bind("<ButtonPress-1>", image_ops.on_selection_start)
+    ctx_ui.image_canvas.bind("<B1-Motion>", image_ops.on_selection_motion)
+    ctx_ui.image_canvas.bind("<ButtonRelease-1>", image_ops.on_selection_end)
 
     # Right Frame - Text Output Components
     text_output_controls = tk.Frame(ctx_ui.text_output_frame)

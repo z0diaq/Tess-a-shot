@@ -7,6 +7,7 @@ import pytesseract
 import ui_ops
 import ctx_ui
 import settings
+import text_ops
 
 original_image = None
 loaded_image_path = None
@@ -25,7 +26,6 @@ selection_coords = [0, 0, 0, 0]  # [x1, y1, x2, y2] in original image coordinate
 
 img_resized = None
 display_scale_factor = (1, 1)  # (width_scale, height_scale)
-selection_canvas = None
 
 def load_image(file_path):
     """
@@ -65,6 +65,8 @@ def load_image(file_path):
         # Calculate loading time
         image_load_time = (time.time() - start_time) * 1000  # Convert to milliseconds
 
+        update_selection_rectangle()
+
         # Reset or adjust selection coordinates for the new image
         if not ctx_ui.remember_region_var.get() or selection_coords == [0, 0, 0, 0]:
             # If not remembering region or if no region was selected, set to full image
@@ -85,8 +87,8 @@ def load_image(file_path):
         process_image()
     except Exception as e:
         ui_ops.set_status(f"Error loading image: {e}")
-        ctx_ui.image_label.config(image=None)
-        ctx_ui.image_label.image = None
+        #ctx_ui.image_label.config(image=None)
+        #ctx_ui.image_label.image = None
         original_image = None
 
 def display_image(force=False):
@@ -98,7 +100,7 @@ def display_image(force=False):
     Args:
         force (bool): If True, forces the image to be redrawn regardless of dimension changes
     """
-    global last_display_width, last_display_height, original_image, loaded_image_path, image_resize_time, display_scale_factor
+    global last_display_width, last_display_height, original_image, loaded_image_path, image_resize_time, display_scale_factor, img_resized
     
     if original_image is None:
         return
@@ -109,8 +111,9 @@ def display_image(force=False):
         start_time = time.time()
         
         # Get current display area dimensions
-        display_width = ctx_ui.image_label.winfo_width()
-        display_height = ctx_ui.image_label.winfo_height()
+        display_width = ctx_ui.image_canvas.winfo_width()
+        display_height = ctx_ui.image_canvas.winfo_height()
+        text_ops.log(f"Display area: {display_width}x{display_height}")
         
         # Use default dimensions if the widget hasn't been rendered yet
         if display_width <= 1:
@@ -121,9 +124,10 @@ def display_image(force=False):
         # Check if dimensions have changed enough to warrant a resize
         # Small changes (less than 5 pixels) don't trigger a resize to improve performance
         if not force and (abs(display_width - last_display_width) < 5 and 
-            abs(display_height - last_display_height) < 5 and 
-            hasattr(ctx_ui.image_label, 'image') and 
-            ctx_ui.image_label.image is not None):
+            abs(display_height - last_display_height) < 5 ):
+            #  and 
+            #hasattr(ctx_ui.image_canvas, 'image') and 
+            #ctx_ui.image_canvas.image is not None):
             return
             
         # Update cached dimensions
@@ -132,6 +136,7 @@ def display_image(force=False):
         
         # Get original image dimensions
         width, height = original_image.size
+        text_ops.log(f"Original image size: {width}x{height}")
         
         # Calculate the new dimensions to fit the display area
         # while maintaining the aspect ratio
@@ -149,10 +154,17 @@ def display_image(force=False):
         
         # Convert to PhotoImage for Tkinter
         photo = ImageTk.PhotoImage(img_resized)
+
+        canvas_width = ctx_ui.image_canvas.winfo_width()
+        image_x = (canvas_width - new_width) // 2
+        image_y = 0  # Top-aligned;
+
+        ctx_ui.image_canvas.photo = photo  # Keep a reference!
+        ctx_ui.image_canvas.create_image(image_x, image_y, anchor="nw", image=photo)
         
         # Update the image label
-        ctx_ui.image_label.config(image=photo)
-        ctx_ui.image_label.image = photo  # Keep a reference to prevent garbage collection
+        #ctx_ui.image_label.config(image=photo)
+        #ctx_ui.image_label.image = photo  # Keep a reference to prevent garbage collection
         
         # Calculate resize time
         image_resize_time = (time.time() - start_time) * 1000  # Convert to milliseconds
@@ -166,9 +178,9 @@ def display_image(force=False):
             
     except Exception as e:
         ui_ops.set_status(f"Error displaying image: {e}")
-        ctx_ui.image_label.config(text=f"Error displaying image: {e}")
-        ctx_ui.image_label.config(image=None)
-        ctx_ui.image_label.image = None
+        #ctx_ui.image_label.config(text=f"Error displaying image: {e}")
+        #ctx_ui.image_label.config(image=None)
+        #ctx_ui.image_label.image = None
 
 def process_image():
     """
@@ -244,8 +256,8 @@ def delete_image():
         
         # Clear the UI elements
         ctx_ui.text_output.delete("1.0", tk.END)
-        ctx_ui.image_label.config(image=None)
-        ctx_ui.image_label.image = None
+        #ctx_ui.image_label.config(image=None)
+        #ctx_ui.image_label.image = None
         
         # Reset cache variables
         loaded_image_path = ""
@@ -273,16 +285,11 @@ def update_selection_rectangle():
     """
     Updates the selection rectangle on the canvas to match the current selection coordinates.
     """
-    global selection_coords, display_scale_factor, selection_rect, selection_canvas
+    global selection_coords, display_scale_factor, selection_rect
     
     if original_image is None:
         return
-    
-    # If canvas doesn't exist yet, create it
-    if not hasattr(ctx_ui.image_label, 'selection_canvas'):
-        create_selection_canvas()
-        return
-    
+        
     # Convert original image coordinates to display coordinates
     x1 = int(selection_coords[0] * display_scale_factor[0])
     y1 = int(selection_coords[1] * display_scale_factor[1])
@@ -291,41 +298,14 @@ def update_selection_rectangle():
     
     # Update or create the selection rectangle
     if selection_rect:
-        selection_canvas.coords(selection_rect, x1, y1, x2, y2)
+        ctx_ui.image_canvas.coords(selection_rect, x1, y1, x2, y2)
     else:
-        selection_rect = selection_canvas.create_rectangle(
+        selection_rect = ctx_ui.image_canvas.create_rectangle(
             x1, y1, x2, y2, 
             outline="blue", 
             width=2,
             dash=(5, 5)
         )
-
-def create_selection_canvas():
-    """
-    Creates a transparent canvas over the image label for drawing the selection rectangle.
-    """
-    global selection_canvas, selection_rect
-    
-    # Create a canvas that overlays the image label
-    selection_canvas = tk.Canvas(
-        ctx_ui.image_preview_frame, 
-        highlightthickness=0,
-        bg="systemTransparent"  # Transparent background
-    )
-    selection_canvas.place(
-        x=ctx_ui.image_label.winfo_x(),
-        y=ctx_ui.image_label.winfo_y(),
-        width=ctx_ui.image_label.winfo_width(),
-        height=ctx_ui.image_label.winfo_height()
-    )
-    
-    # Store canvas in image_label for easy access
-    ctx_ui.image_label.selection_canvas = selection_canvas
-    
-    # Set up mouse event bindings for selection
-    selection_canvas.bind("<ButtonPress-1>", on_selection_start)
-    selection_canvas.bind("<B1-Motion>", on_selection_motion)
-    selection_canvas.bind("<ButtonRelease-1>", on_selection_end)
 
 def on_selection_start(event):
     """Handle the start of a rectangle selection."""
@@ -335,20 +315,32 @@ def on_selection_start(event):
     
     # Create or update selection rectangle
     if selection_rect:
-        selection_canvas.coords(selection_rect, event.x, event.y, event.x, event.y)
+        ctx_ui.image_canvas.coords(selection_rect, event.x, event.y, event.x, event.y)
     else:
-        selection_rect = selection_canvas.create_rectangle(
+        selection_rect = ctx_ui.image_canvas.create_rectangle(
             event.x, event.y, event.x, event.y, 
-            outline="blue", 
-            width=2,
-            dash=(5, 5)
+            outline='red', width=2, fill='red', stipple='gray50'
         )
 
 def on_selection_motion(event):
-    """Handle the mouse movement during selection."""
+    """Handle the mouse movement during selection, constrained to image bounds."""
     global selection_rect
     if selection_rect:
-        selection_canvas.coords(selection_rect, selection_start_x, selection_start_y, event.x, event.y)
+        # Get canvas size and displayed image size
+        canvas_width = ctx_ui.image_canvas.winfo_width()
+        canvas_height = ctx_ui.image_canvas.winfo_height()
+        if img_resized is not None:
+            img_width, img_height = img_resized.size
+        else:
+            img_width, img_height = canvas_width, canvas_height
+        # Centered image x offset
+        image_x = (canvas_width - img_width) // 2
+        image_y = 0  # Top-aligned
+        # Constrain mouse to image area
+        x = min(max(event.x, image_x), image_x + img_width)
+        y = min(max(event.y, image_y), image_y + img_height)
+        ctx_ui.image_canvas.tag_raise(selection_rect)
+        ctx_ui.image_canvas.coords(selection_rect, selection_start_x, selection_start_y, x, y)
 
 def on_selection_end(event):
     """
@@ -356,37 +348,51 @@ def on_selection_end(event):
     Then process the selected region.
     """
     global selection_coords, selection_rect, display_scale_factor
-    
     if not selection_rect or not original_image:
         return
-    
+    # Get canvas size and displayed image size
+    canvas_width = ctx_ui.image_canvas.winfo_width()
+    canvas_height = ctx_ui.image_canvas.winfo_height()
+    if img_resized is not None:
+        img_width, img_height = img_resized.size
+    else:
+        img_width, img_height = canvas_width, canvas_height
+    image_x = (canvas_width - img_width) // 2
+    image_y = 0  # Top-aligned
     # Get the rectangle coordinates in display space
-    x1, y1, x2, y2 = selection_canvas.coords(selection_rect)
-    
+    x1, y1, x2, y2 = ctx_ui.image_canvas.coords(selection_rect)
+    # Constrain to image area
+    x1 = min(max(x1, image_x), image_x + img_width)
+    x2 = min(max(x2, image_x), image_x + img_width)
+    y1 = min(max(y1, image_y), image_y + img_height)
+    y2 = min(max(y2, image_y), image_y + img_height)
     # Ensure x1 < x2 and y1 < y2
     if x1 > x2:
         x1, x2 = x2, x1
     if y1 > y2:
         y1, y2 = y2, y1
-    
     # Convert display coordinates back to original image coordinates
-    orig_x1 = int(x1 / display_scale_factor[0])
-    orig_y1 = int(y1 / display_scale_factor[1])
-    orig_x2 = int(x2 / display_scale_factor[0])
-    orig_y2 = int(y2 / display_scale_factor[1])
-    
+    # Adjust for offset and scale
+    rel_x1 = x1 - image_x
+    rel_y1 = y1 - image_y
+    rel_x2 = x2 - image_x
+    rel_y2 = y2 - image_y
+    if img_width > 0 and img_height > 0:
+        orig_x1 = int(rel_x1 * (original_image.size[0] / img_width))
+        orig_y1 = int(rel_y1 * (original_image.size[1] / img_height))
+        orig_x2 = int(rel_x2 * (original_image.size[0] / img_width))
+        orig_y2 = int(rel_y2 * (original_image.size[1] / img_height))
+    else:
+        orig_x1 = orig_y1 = orig_x2 = orig_y2 = 0
     # Ensure coordinates are within image bounds
     width, height = original_image.size
     orig_x1 = max(0, min(orig_x1, width - 1))
     orig_y1 = max(0, min(orig_y1, height - 1))
     orig_x2 = max(orig_x1 + 1, min(orig_x2, width))
     orig_y2 = max(orig_y1 + 1, min(orig_y2, height))
-    
     # Update selection coordinates
     selection_coords = [orig_x1, orig_y1, orig_x2, orig_y2]
-    
     # Update the selection rectangle
-    selection_canvas.coords(selection_rect, x1, y1, x2, y2)
-    
+    ctx_ui.image_canvas.coords(selection_rect, x1, y1, x2, y2)
     # Process the selected region
     process_image()

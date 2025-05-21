@@ -146,10 +146,10 @@ def on_resize(event):
     ctx_ui.window._resize_job = ctx_ui.window.after(resize_delay, image_ops.display_image)
 
     # Update the selection canvas position and size
-    if hasattr(ctx_ui.image_label, 'selection_canvas') and image_ops.selection_canvas:
+    if hasattr(ctx_ui.image_canvas, 'selection_canvas') and image_ops.selection_canvas:
         image_ops.selection_canvas.place(
-            width=ctx_ui.image_label.winfo_width(),
-            height=ctx_ui.image_label.winfo_height())
+            width=ctx_ui.image_canvas.winfo_width(),
+            height=ctx_ui.image_canvas.winfo_height())
 
 def on_right_pane_drag(event):
     # Cancel any pending resize tasks

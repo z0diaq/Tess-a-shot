@@ -55,3 +55,7 @@ def on_text_selection(event):
                 ui_ops.set_status("Selected text copied to clipboard.")
         except tk.TclError:  # No selection
             pass  # Do nothing if no text is selected
+
+def log(message):
+    """Log messages to the console."""
+    print(message)
