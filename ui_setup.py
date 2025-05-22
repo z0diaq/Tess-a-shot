@@ -99,6 +99,10 @@ def setup():
     ctx_ui.image_canvas.bind("<B1-Motion>", image_ops.on_selection_motion)
     ctx_ui.image_canvas.bind("<ButtonRelease-1>", image_ops.on_selection_end)
 
+    # Make image_canvas a drop target
+    ctx_ui.image_canvas.drop_target_register(DND_FILES)
+    ctx_ui.image_canvas.dnd_bind("<<Drop>>", ui_ops.handle_drop)
+
     # Right Frame - Text Output Components
     text_output_controls = tk.Frame(ctx_ui.text_output_frame)
     text_output_controls.pack(fill=tk.X, pady=(0, 5))
@@ -128,9 +132,9 @@ def setup():
     reformat_lines_checkbox.pack(side=tk.LEFT)
 
     # "Remember region" checkbox
-    ctx_ui.remember_region_var = tk.BooleanVar()
-    remember_region_checkbox = tk.Checkbutton(checkboxes_frame, text="Remember region", variable=ctx_ui.remember_region_var)
-    remember_region_checkbox.pack(side=tk.LEFT, padx=(10, 0))
+    #ctx_ui.remember_region_var = tk.BooleanVar()
+    #remember_region_checkbox = tk.Checkbutton(checkboxes_frame, text="Remember region", variable=ctx_ui.remember_region_var)
+    #remember_region_checkbox.pack(side=tk.LEFT, padx=(10, 0))
 
     # Text output area
     ctx_ui.text_output = scrolledtext.ScrolledText(ctx_ui.text_output_frame)

@@ -3,6 +3,7 @@ import time
 import tkinter as tk
 from PIL import Image, ImageTk
 import pytesseract
+import threading
 
 import ui_ops
 import ctx_ui
@@ -31,7 +32,7 @@ def load_image(file_path):
     """
     Loads an image from the specified file path, updates the UI, and processes the image for OCR.
     """
-    global loaded_image_path, original_image, image_load_time, selection_coords
+    global loaded_image_path, original_image, image_load_time, selection_coords, image_file_name, selection_rect
 
     # Update the directory entry if it's from a different directory
     directory = os.path.dirname(file_path)
@@ -64,17 +65,6 @@ def load_image(file_path):
         
         # Calculate loading time
         image_load_time = (time.time() - start_time) * 1000  # Convert to milliseconds
-
-        update_selection_rectangle()
-
-        # Reset or adjust selection coordinates for the new image
-        if not ctx_ui.remember_region_var.get() or selection_coords == [0, 0, 0, 0]:
-            # If not remembering region or if no region was selected, set to full image
-            width, height = original_image.size
-            selection_coords = [0, 0, width, height]
-        else:
-            # Ensure coordinates don't go beyond the new image boundaries
-            adjust_selection_to_image_bounds()
         
         # Update the display and force a refresh
         ctx_ui.window.update_idletasks()
@@ -82,13 +72,14 @@ def load_image(file_path):
         
         # Set the loaded image path
         loaded_image_path = file_path
+        image_file_name = os.path.basename(file_path)
         
         # Automatically process the image for OCR
-        process_image()
+        process_image_async()
     except Exception as e:
         ui_ops.set_status(f"Error loading image: {e}")
-        #ctx_ui.image_label.config(image=None)
-        #ctx_ui.image_label.image = None
+        ctx_ui.image_canvas.photo = None  # Clear the reference to avoid memory leaks
+        ctx_ui.image_canvas.delete("all")  # Clear the canvas
         original_image = None
 
 def display_image(force=False):
@@ -100,7 +91,7 @@ def display_image(force=False):
     Args:
         force (bool): If True, forces the image to be redrawn regardless of dimension changes
     """
-    global last_display_width, last_display_height, original_image, loaded_image_path, image_resize_time, display_scale_factor, img_resized
+    global last_display_width, last_display_height, original_image, loaded_image_path, image_resize_time, display_scale_factor, img_resized, selection_coords, selection_rect
     
     if original_image is None:
         return
@@ -123,11 +114,8 @@ def display_image(force=False):
             
         # Check if dimensions have changed enough to warrant a resize
         # Small changes (less than 5 pixels) don't trigger a resize to improve performance
-        if not force and (abs(display_width - last_display_width) < 5 and 
+        if not force and hasattr(ctx_ui.image_canvas, 'photo') and (abs(display_width - last_display_width) < 5 and 
             abs(display_height - last_display_height) < 5 ):
-            #  and 
-            #hasattr(ctx_ui.image_canvas, 'image') and 
-            #ctx_ui.image_canvas.image is not None):
             return
             
         # Update cached dimensions
@@ -162,13 +150,33 @@ def display_image(force=False):
         ctx_ui.image_canvas.photo = photo  # Keep a reference!
         ctx_ui.image_canvas.create_image(image_x, image_y, anchor="nw", image=photo)
         
-        # Update the image label
-        #ctx_ui.image_label.config(image=photo)
-        #ctx_ui.image_label.image = photo  # Keep a reference to prevent garbage collection
-        
         # Calculate resize time
         image_resize_time = (time.time() - start_time) * 1000  # Convert to milliseconds
-        
+
+        if selection_rect:
+            ctx_ui.image_canvas.tag_raise(selection_rect)
+
+        # Reset or adjust selection coordinates for the new image
+        ''' WIP: remeber region
+        if not ctx_ui.remember_region_var.get() or selection_coords == [0, 0, 0, 0]:
+            # If not remembering region or if no region was selected, set to full image
+            text_ops.log(f"Re-setting selection coordinates to full image: {selection_coords}")
+            width, height = original_image.size
+            selection_coords = [0, 0, width, height]
+            if selection_rect:
+                ctx_ui.image_canvas.delete(selection_rect)
+                selection_rect = None  # Reset selection rectangle
+        else:
+            # Ensure coordinates don't go beyond the new image boundaries
+            text_ops.log(f"Adjusting selection coordinates: {selection_coords}")
+            adjust_selection_to_image_bounds()
+        '''
+        width, height = original_image.size
+        selection_coords = [0, 0, width, height]
+        if selection_rect:
+            ctx_ui.image_canvas.delete(selection_rect)
+            selection_rect = None  # Reset selection rectangle
+
         if force:
             # For forced updates, keep the existing status message
             pass
@@ -178,61 +186,45 @@ def display_image(force=False):
             
     except Exception as e:
         ui_ops.set_status(f"Error displaying image: {e}")
-        #ctx_ui.image_label.config(text=f"Error displaying image: {e}")
-        #ctx_ui.image_label.config(image=None)
-        #ctx_ui.image_label.image = None
+        ctx_ui.image_canvas.photo = None  # Clear the reference to avoid memory leaks
+        ctx_ui.image_canvas.delete("all")  # Clear the canvas
 
-def process_image():
+def process_image_async():
     """
-    Processes the loaded image using OCR.
+    Processes the loaded image using OCR in a background thread.
     Extracts the text from the image and displays it in the text area.
     Handles potential errors during the OCR process.
     Includes timing information for the OCR processing.
     """
-    global original_image, extracted_text, image_ocr_time, image_file_name, loaded_image_path
+    global original_image, extracted_text, image_ocr_time, loaded_image_path
 
-    ui_ops.clear_error()
-    
-    if not loaded_image_path or not original_image or selection_coords == [0, 0, 0, 0]:
-        ctx_ui.text_output.delete("1.0", tk.END)
-        ctx_ui.text_output.insert(tk.END, "Please select an image first.")
-        return
-
-    # Start timing for OCR processing
-    start_time = time.time()
-    
-    try:
-        # Extract the selected region from the original image
-        x1, y1, x2, y2 = selection_coords
-        region_width = x2 - x1
-        region_height = y2 - y1
-        
-        # Crop the image to the selected region
-        region_image = original_image.crop((x1, y1, x2, y2))
-        
-        # Perform OCR on the selected region using pytesseract
-        extracted_text = pytesseract.image_to_string(region_image)
-        
-        # Calculate OCR processing time
-        image_ocr_time = (time.time() - start_time) * 1000  # Convert to milliseconds
-        
-        # Clear previous text and insert the new extracted text
-        ctx_ui.text_output.delete("1.0", tk.END)
-        ctx_ui.text_output.insert(tk.END, extracted_text)
-        
-        # TODO: add status message about region based processing
-
-        # Update status with file name and timing information
-        image_file_name = os.path.basename(loaded_image_path)
-        ui_ops.show_status()
-    except FileNotFoundError:
-        ctx_ui.text_output.delete("1.0", tk.END)
-        ctx_ui.text_output.insert(tk.END, "Error: Image file not found.")
-        ui_ops.show_status()
-    except Exception as e:
-        ctx_ui.text_output.delete("1.0", tk.END)
-        ctx_ui.text_output.insert(tk.END, f"Error during OCR processing: {e}")
-        ui_ops.show_status()
+    def ocr_task():
+        if not loaded_image_path or not original_image or selection_coords == [0, 0, 0, 0]:
+            ctx_ui.text_output.delete("1.0", tk.END)
+            ctx_ui.text_output.insert(tk.END, "Please select an image first.")
+            return
+        start_time = time.time()
+        try:
+            x1, y1, x2, y2 = selection_coords
+            region_image = original_image.crop((x1, y1, x2, y2))
+            result = pytesseract.image_to_string(region_image)
+            elapsed = (time.time() - start_time) * 1000
+            def update_ui():
+                nonlocal result, elapsed
+                global extracted_text, image_ocr_time
+                image_ocr_time = elapsed
+                extracted_text = result
+                ctx_ui.text_output.delete("1.0", tk.END)
+                ctx_ui.text_output.insert(tk.END, result)
+                ui_ops.show_status()
+            ctx_ui.window.after(0, update_ui)
+        except Exception as e:
+            def update_ui_error():
+                ctx_ui.text_output.delete("1.0", tk.END)
+                ctx_ui.text_output.insert(tk.END, f"Error during OCR processing: {e}")
+                ui_ops.show_status()
+            ctx_ui.window.after(0, update_ui_error)
+    threading.Thread(target=ocr_task, daemon=True).start()
 
 # Function to delete the current image file
 def delete_image():
@@ -256,8 +248,10 @@ def delete_image():
         
         # Clear the UI elements
         ctx_ui.text_output.delete("1.0", tk.END)
-        #ctx_ui.image_label.config(image=None)
-        #ctx_ui.image_label.image = None
+        ctx_ui.text_output.insert(tk.END, "Image deleted.")
+        ctx_ui.image_canvas.delete("all")  # Clear the canvas
+        ctx_ui.image_canvas.photo = None  # Clear the reference to avoid memory leaks
+        ctx_ui.status_label.config(text="No image loaded")
         
         # Reset cache variables
         loaded_image_path = ""
@@ -319,7 +313,7 @@ def on_selection_start(event):
     else:
         selection_rect = ctx_ui.image_canvas.create_rectangle(
             event.x, event.y, event.x, event.y, 
-            outline='red', width=2, fill='red', stipple='gray50'
+            outline='green', width=2, fill='green', stipple='gray50'
         )
 
 def on_selection_motion(event):
@@ -395,4 +389,4 @@ def on_selection_end(event):
     # Update the selection rectangle
     ctx_ui.image_canvas.coords(selection_rect, x1, y1, x2, y2)
     # Process the selected region
-    process_image()
+    process_image_async()
