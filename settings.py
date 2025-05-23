@@ -17,7 +17,8 @@ DEFAULT_SETTINGS = {
     "right_pane_ratio": 0.5,  # 50% split for image preview and text output
     "options": {
         "copy_on_select": False,
-        "reformat_lines": False
+        "reformat_lines": False,
+        "remember_region": False
     },
     "last_directory": ""
 }
@@ -35,6 +36,7 @@ def save(ctx_ui):
         settings["right_pane_ratio"] = ctx_ui.image_preview_frame.winfo_height() / ctx_ui.right_frame.winfo_height()
     settings["options"]["copy_on_select"] = ctx_ui.copy_on_select_var.get()
     settings["options"]["reformat_lines"] = ctx_ui.reformat_lines_var.get()
+    settings["options"]["remember_region"] = ctx_ui.remember_region_var.get()
     settings["last_directory"] = current_directory
     try:
         with open(CONFIG_FILE, 'w') as f:
@@ -63,6 +65,8 @@ def apply(ctx_ui):
     ctx_ui.window.geometry(geometry)
     ctx_ui.copy_on_select_var.set(settings["options"]["copy_on_select"])
     ctx_ui.reformat_lines_var.set(settings["options"]["reformat_lines"])
+    ctx_ui.remember_region_var.set(settings["options"].get("remember_region", False))
+    global current_directory
     current_directory = settings["last_directory"]
     if current_directory and os.path.exists(current_directory):
         ctx_ui.directory_entry.delete(0, tk.END)
