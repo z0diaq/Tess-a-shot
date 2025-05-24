@@ -215,6 +215,12 @@ def update_selection_rectangle_from_coords():
         display_y1 = int((orig_y1 / orig_img_height) * img_height) + image_y
         display_x2 = int((orig_x2 / orig_img_width) * img_width) + image_x
         display_y2 = int((orig_y2 / orig_img_height) * img_height) + image_y
+
+        # Ensure selection rectangle is with image bounds
+        display_x1 = max(image_x, min(display_x1, image_x + img_width))
+        display_x2 = max(image_x, min(display_x2, image_x + img_width))
+        display_y1 = max(image_y, min(display_y1, image_y + img_height))
+        display_y2 = max(image_y, min(display_y2, image_y + img_height))
         
         # Create or update the selection rectangle
         if selection_rect:
@@ -225,7 +231,6 @@ def update_selection_rectangle_from_coords():
             outline='green', width=2, fill='green', stipple='gray50'
         )
 
-        
         text_ops.log(f"Updated selection rectangle - Original coords: {selection_coords}, Display coords: [{display_x1}, {display_y1}, {display_x2}, {display_y2}]")
 
 def process_image_async():
