@@ -285,9 +285,16 @@ def delete_image():
         
         # Remove from listbox
         filename = os.path.basename(loaded_image_path)
+        next_index = None
         for i in range(ctx_ui.file_listbox.size()):
             if ctx_ui.file_listbox.get(i) == filename:
                 ctx_ui.file_listbox.delete(i)
+                # Determine next file index
+                if ctx_ui.file_listbox.size() > 0:
+                    if i < ctx_ui.file_listbox.size():
+                        next_index = i
+                    else:
+                        next_index = ctx_ui.file_listbox.size() - 1
                 break
         
         # Clear the UI elements
@@ -302,6 +309,16 @@ def delete_image():
         original_image = None
         last_display_width = 0
         last_display_height = 0
+
+        # Automatically open and process the next file in the list, if any
+        if next_index is not None and next_index < ctx_ui.file_listbox.size():
+            next_file = ctx_ui.file_listbox.get(next_index)
+            # Highligh the next file in the listbox
+            ctx_ui.file_listbox.selection_clear(0, tk.END)
+            ctx_ui.file_listbox.selection_set(next_index)
+            ctx_ui.file_listbox.see(next_index)
+            next_file_path = os.path.join(settings.current_directory, next_file)
+            load_image(next_file_path)
     except Exception as e:
         ui_ops.set_status(f"Error deleting image: {e}")
 
