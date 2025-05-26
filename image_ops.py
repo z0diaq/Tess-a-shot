@@ -28,6 +28,10 @@ selection_coords = [0, 0, 0, 0]  # [x1, y1, x2, y2] in original image coordinate
 img_resized = None
 display_scale_factor = (1, 1)  # (width_scale, height_scale)
 
+# For OCR cancellation
+ocr_generation = 0
+ocr_generation_lock = threading.Lock()
+
 def load_image(file_path):
     """
     Loads an image from the specified file path, updates the UI, and processes the image for OCR.
@@ -236,16 +240,19 @@ def update_selection_rectangle_from_coords():
 def process_image_async():
     """
     Processes the loaded image using OCR in a background thread.
-    Extracts the text from the image and displays it in the text area.
-    Handles potential errors during the OCR process.
-    Includes timing information for the OCR processing.
+    Cancels previous OCR operation if a new one is started.
     """
-    global original_image, extracted_text, image_ocr_time, loaded_image_path
+    global original_image, extracted_text, image_ocr_time, loaded_image_path, ocr_generation
 
-    def ocr_task():
+    with ocr_generation_lock:
+        ocr_generation += 1
+        my_generation = ocr_generation
+
+    def ocr_task(my_generation):
         if not loaded_image_path or not original_image or selection_coords == [0, 0, 0, 0]:
-            ctx_ui.text_output.delete("1.0", tk.END)
-            ctx_ui.text_output.insert(tk.END, "Please select an image first.")
+            if my_generation == ocr_generation:
+                ctx_ui.text_output.delete("1.0", tk.END)
+                ctx_ui.text_output.insert(tk.END, "Please select an image first.")
             return
         start_time = time.time()
         try:
@@ -256,6 +263,8 @@ def process_image_async():
             def update_ui():
                 nonlocal result, elapsed
                 global extracted_text, image_ocr_time
+                if my_generation != ocr_generation:
+                    return  # Cancelled
                 image_ocr_time = elapsed
                 extracted_text = result
                 ctx_ui.text_output.delete("1.0", tk.END)
@@ -264,11 +273,13 @@ def process_image_async():
             ctx_ui.window.after(0, update_ui)
         except Exception as e:
             def update_ui_error():
+                if my_generation != ocr_generation:
+                    return  # Cancelled
                 ctx_ui.text_output.delete("1.0", tk.END)
                 ctx_ui.text_output.insert(tk.END, f"Error during OCR processing: {e}")
                 ui_ops.show_status()
             ctx_ui.window.after(0, update_ui_error)
-    threading.Thread(target=ocr_task, daemon=True).start()
+    threading.Thread(target=ocr_task, args=(my_generation,), daemon=True).start()
 
 # Function to delete the current image file
 def delete_image():
