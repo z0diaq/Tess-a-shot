@@ -17,8 +17,8 @@ def on_file_select(event):
     if not selection:
         return
         
-    filename = ctx_ui.file_listbox.get(selection[0])
-    file_path = os.path.join(settings.current_directory, filename)
+    settings.current_file = ctx_ui.file_listbox.get(selection[0])
+    file_path = os.path.join(settings.current_directory, settings.current_file)
     
     # Load the selected image
     image_ops.load_image(file_path)
@@ -54,6 +54,7 @@ def select_directory():
         return
         
     settings.current_directory = directory_path
+    settings.current_file = ""
     ctx_ui.directory_entry.delete(0, tk.END)
     ctx_ui.directory_entry.insert(0, directory_path)
     
@@ -82,6 +83,17 @@ def refresh_file_list():
         # Add files to the listbox
         for file in files:
             ctx_ui.file_listbox.insert(tk.END, file)
+        
+        if settings.current_file and settings.current_file in files:
+            index = files.index(settings.current_file)
+            ctx_ui.file_listbox.selection_clear(0, tk.END)
+            ctx_ui.file_listbox.selection_set(index)
+            ctx_ui.file_listbox.see(index)
+
+            file_path = os.path.join(settings.current_directory, settings.current_file)
+    
+            # Load the selected image
+            image_ops.load_image(file_path)
             
         # Update status
         set_status(f"Found {len(files)} image files in {settings.current_directory}")

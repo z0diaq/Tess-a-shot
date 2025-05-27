@@ -5,6 +5,7 @@ import tkinter as tk
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".tessashot_config.json")
 
 current_directory = ""
+current_file = ""
 
 DEFAULT_SETTINGS = {
     "window": {
@@ -20,7 +21,8 @@ DEFAULT_SETTINGS = {
         "reformat_lines": False,
         "remember_region": False
     },
-    "last_directory": ""
+    "last_directory": "",
+    "last_file": ""
 }
 
 settings = DEFAULT_SETTINGS.copy()
@@ -38,6 +40,7 @@ def save(ctx_ui):
     settings["options"]["reformat_lines"] = ctx_ui.reformat_lines_var.get()
     settings["options"]["remember_region"] = ctx_ui.remember_region_var.get()
     settings["last_directory"] = current_directory
+    settings["last_file"] = current_file
     try:
         with open(CONFIG_FILE, 'w') as f:
             json.dump(settings, f, indent=4)
@@ -66,8 +69,9 @@ def apply(ctx_ui):
     ctx_ui.copy_on_select_var.set(settings["options"]["copy_on_select"])
     ctx_ui.reformat_lines_var.set(settings["options"]["reformat_lines"])
     ctx_ui.remember_region_var.set(settings["options"].get("remember_region", False))
-    global current_directory
+    global current_directory, current_file
     current_directory = settings["last_directory"]
+    current_file = settings["last_file"]
     if current_directory and os.path.exists(current_directory):
         ctx_ui.directory_entry.delete(0, tk.END)
         ctx_ui.directory_entry.insert(0, current_directory)
