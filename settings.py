@@ -6,6 +6,7 @@ CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".tessashot_config.json")
 
 current_directory = ""
 current_file = ""
+selection_coords = [0, 0, 0, 0]  # [x1, y1, x2, y2] in original image coordinates
 
 DEFAULT_SETTINGS = {
     "window": {
@@ -22,7 +23,13 @@ DEFAULT_SETTINGS = {
         "remember_region": False
     },
     "last_directory": "",
-    "last_file": ""
+    "last_file": "",
+    "last_selection": {
+        "x1": 0,
+        "y1": 0,
+        "x2": 0,
+        "y2": 0
+    }
 }
 
 settings = DEFAULT_SETTINGS.copy()
@@ -41,6 +48,20 @@ def save(ctx_ui):
     settings["options"]["remember_region"] = ctx_ui.remember_region_var.get()
     settings["last_directory"] = current_directory
     settings["last_file"] = current_file
+    if ctx_ui.remember_region_var.get():
+        settings["last_selection"] = {
+            "x1": selection_coords[0],
+            "y1": selection_coords[1],
+            "x2": selection_coords[2],
+            "y2": selection_coords[3]
+        }
+    else:
+        settings["last_selection"] = {
+            "x1": 0,
+            "y1": 0,
+            "x2": 0,
+            "y2": 0
+        }
     try:
         with open(CONFIG_FILE, 'w') as f:
             json.dump(settings, f, indent=4)
@@ -53,11 +74,13 @@ def load(settings):
             with open(CONFIG_FILE, 'r') as f:
                 loaded_settings = json.load(f)
                 settings.update(loaded_settings)
+
     except Exception as e:
         print(f"Error loading settings: {e}")
     return settings
 
 def apply(ctx_ui):
+
     width = settings["window"]["width"]
     height = settings["window"]["height"]
     x = settings["window"]["x"]
@@ -69,10 +92,18 @@ def apply(ctx_ui):
     ctx_ui.copy_on_select_var.set(settings["options"]["copy_on_select"])
     ctx_ui.reformat_lines_var.set(settings["options"]["reformat_lines"])
     ctx_ui.remember_region_var.set(settings["options"].get("remember_region", False))
+
+    selection_coords[0] = settings["last_selection"]["x1"]
+    selection_coords[1] = settings["last_selection"]["y1"]
+    selection_coords[2] = settings["last_selection"]["x2"]
+    selection_coords[3] = settings["last_selection"]["y2"]
+
     global current_directory, current_file
+
     current_directory = settings["last_directory"]
     current_file = settings["last_file"]
     if current_directory and os.path.exists(current_directory):
         ctx_ui.directory_entry.delete(0, tk.END)
         ctx_ui.directory_entry.insert(0, current_directory)
         ctx_ui.refresh_file_list()
+    

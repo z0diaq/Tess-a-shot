@@ -23,7 +23,6 @@ last_resize_time = 0
 selection_start_x = 0
 selection_start_y = 0
 selection_rect = None
-selection_coords = [0, 0, 0, 0]  # [x1, y1, x2, y2] in original image coordinates
 
 img_resized = None
 display_scale_factor = (1, 1)  # (width_scale, height_scale)
@@ -36,7 +35,7 @@ def load_image(file_path):
     """
     Loads an image from the specified file path, updates the UI, and processes the image for OCR.
     """
-    global loaded_image_path, original_image, image_load_time, selection_coords, image_file_name, selection_rect
+    global loaded_image_path, original_image, image_load_time, image_file_name, selection_rect
 
     # Update the directory entry if it's from a different directory
     directory = os.path.dirname(file_path)
@@ -98,7 +97,7 @@ def display_image(force=False):
     Args:
         force (bool): If True, forces the image to be redrawn regardless of dimension changes
     """
-    global last_display_width, last_display_height, original_image, loaded_image_path, image_resize_time, display_scale_factor, img_resized, selection_coords, selection_rect
+    global last_display_width, last_display_height, original_image, loaded_image_path, image_resize_time, display_scale_factor, img_resized, selection_rect
     
     if original_image is None:
         return
@@ -165,15 +164,15 @@ def display_image(force=False):
         image_resize_time = (time.time() - start_time) * 1000  # Convert to milliseconds
 
         # Reset or adjust selection coordinates for the new image
-        if not ctx_ui.remember_region_var.get() or selection_coords == [0, 0, 0, 0]:
+        if not ctx_ui.remember_region_var.get() or settings.selection_coords == [0, 0, 0, 0]:
             # If not remembering region or if no region was selected, set to full image
-            text_ops.log(f"Re-setting selection coordinates to full image: {selection_coords}")
+            text_ops.log(f"Re-setting selection coordinates to full image: {settings.selection_coords}")
             width, height = original_image.size
-            selection_coords = [0, 0, width, height]
+            settings.selection_coords = [0, 0, width, height]
             selection_rect = None  # Reset selection rectangle reference
         else:
             # Keep the existing selection coordinates (they're in original image space)
-            text_ops.log(f"Keeping existing selection coordinates: {selection_coords}")
+            text_ops.log(f"Keeping existing selection coordinates: {settings.selection_coords}")
             # Update the visual selection rectangle to match the stored coordinates
             update_selection_rectangle_from_coords()
 
@@ -194,9 +193,9 @@ def update_selection_rectangle_from_coords():
     Creates or updates the selection rectangle on the canvas based on the stored selection coordinates.
     This function converts from original image coordinates to display coordinates.
     """
-    global selection_coords, selection_rect, display_scale_factor
+    global selection_rect, display_scale_factor
     
-    if not original_image or selection_coords == [0, 0, 0, 0]:
+    if not original_image or settings.selection_coords == [0, 0, 0, 0]:
         return
     
     # Get canvas and image display info
@@ -210,7 +209,7 @@ def update_selection_rectangle_from_coords():
     image_y = 0  # Top-aligned
     
     # Convert original image coordinates to display coordinates
-    orig_x1, orig_y1, orig_x2, orig_y2 = selection_coords
+    orig_x1, orig_y1, orig_x2, orig_y2 = settings.selection_coords
     orig_img_width, orig_img_height = original_image.size
     
     # Scale coordinates to display size
@@ -235,7 +234,7 @@ def update_selection_rectangle_from_coords():
             outline='green', width=2, fill='green', stipple='gray50'
         )
 
-        text_ops.log(f"Updated selection rectangle - Original coords: {selection_coords}, Display coords: [{display_x1}, {display_y1}, {display_x2}, {display_y2}]")
+        text_ops.log(f"Updated selection rectangle - Original coords: {settings.selection_coords}, Display coords: [{display_x1}, {display_y1}, {display_x2}, {display_y2}]")
 
 def process_image_async():
     """
@@ -249,14 +248,14 @@ def process_image_async():
         my_generation = ocr_generation
 
     def ocr_task(my_generation):
-        if not loaded_image_path or not original_image or selection_coords == [0, 0, 0, 0]:
+        if not loaded_image_path or not original_image or settings.selection_coords == [0, 0, 0, 0]:
             if my_generation == ocr_generation:
                 ctx_ui.text_output.delete("1.0", tk.END)
                 ctx_ui.text_output.insert(tk.END, "Please select an image first.")
             return
         start_time = time.time()
         try:
-            x1, y1, x2, y2 = selection_coords
+            x1, y1, x2, y2 = settings.selection_coords
             region_image = original_image.crop((x1, y1, x2, y2))
             result = pytesseract.image_to_string(region_image)
             elapsed = (time.time() - start_time) * 1000
@@ -338,7 +337,7 @@ def update_selection_rectangle():
     Updates the selection coordinates based on the current selection rectangle on the canvas.
     This function converts from display coordinates to original image coordinates.
     """
-    global selection_coords, selection_rect, display_scale_factor
+    global selection_rect, display_scale_factor
     if not selection_rect or not original_image:
         return
         
@@ -391,13 +390,13 @@ def update_selection_rectangle():
     orig_y2 = max(orig_y1 + 1, min(orig_y2, height))
     
     # Update selection coordinates
-    selection_coords = [orig_x1, orig_y1, orig_x2, orig_y2]
+    settings.selection_coords = [orig_x1, orig_y1, orig_x2, orig_y2]
     
     # Update the selection rectangle coordinates on canvas
     ctx_ui.image_canvas.coords(selection_rect, x1, y1, x2, y2)
 
     # Log new selection coordinates
-    text_ops.log(f"Updated selection coordinates: {selection_coords}")
+    text_ops.log(f"Updated selection coordinates: {settings.selection_coords}")
     text_ops.log(f"Canvas coordinates: {ctx_ui.image_canvas.coords(selection_rect)}")
 
 def on_selection_start(event):
