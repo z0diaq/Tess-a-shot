@@ -16,9 +16,12 @@ def on_file_select(event):
     selection = ctx_ui.file_listbox.curselection()
     if not selection:
         return
-        
-    settings.current_file = ctx_ui.file_listbox.get(selection[0])
-    file_path = os.path.join(settings.current_directory, settings.current_file)
+    
+    # Extract file name from display string (remove size info)
+    display_name = ctx_ui.file_listbox.get(selection[0])
+    file_name = display_name.split(' (')[0]
+    settings.current_file = file_name
+    file_path = os.path.join(settings.current_directory, file_name)
     
     # Load the selected image
     image_ops.load_image(file_path)
@@ -63,38 +66,35 @@ def select_directory():
 
 def refresh_file_list():
     """Refreshes the file list based on the current directory."""
-    
     # Clear the current file list
     ctx_ui.file_listbox.delete(0, tk.END)
-    
+
     if not settings.current_directory or not os.path.exists(settings.current_directory):
         return
-    
+
     # Get all image files in the directory
     image_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif')
     try:
         files = [f for f in os.listdir(settings.current_directory) 
                 if os.path.isfile(os.path.join(settings.current_directory, f)) 
                 and f.lower().endswith(image_extensions)]
-        
         # Sort files alphabetically
         files.sort()
-        
-        # Add files to the listbox
+        # Add files to the listbox with size
         for file in files:
-            ctx_ui.file_listbox.insert(tk.END, file)
-        
+            file_path = os.path.join(settings.current_directory, file)
+            size = os.path.getsize(file_path)
+            display_name = f"{file} ({size/1024:.1f} KiB)"
+            ctx_ui.file_listbox.insert(tk.END, display_name)
+        # Adjust selection logic to match display name
         if settings.current_file and settings.current_file in files:
             index = files.index(settings.current_file)
             ctx_ui.file_listbox.selection_clear(0, tk.END)
             ctx_ui.file_listbox.selection_set(index)
             ctx_ui.file_listbox.see(index)
-
             file_path = os.path.join(settings.current_directory, settings.current_file)
-    
             # Load the selected image
             image_ops.load_image(file_path)
-            
         # Update status
         set_status(f"Found {len(files)} image files in {settings.current_directory}")
     except Exception as e:
