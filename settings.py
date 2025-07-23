@@ -29,6 +29,10 @@ DEFAULT_SETTINGS = {
         "y1": 0,
         "x2": 0,
         "y2": 0
+    },
+    "file_list_columns": {
+        "name": 200,
+        "size": 80
     }
 }
 
@@ -61,6 +65,12 @@ def save(ctx_ui):
             "y1": 0,
             "x2": 0,
             "y2": 0
+        }
+    # Save file list column widths if available
+    if hasattr(ctx_ui, 'file_tree') and ctx_ui.file_tree is not None:
+        settings["file_list_columns"] = {
+            "name": ctx_ui.file_tree.column("name", option="width"),
+            "size": ctx_ui.file_tree.column("size", option="width")
         }
     try:
         with open(CONFIG_FILE, 'w') as f:
@@ -106,4 +116,11 @@ def apply(ctx_ui):
         ctx_ui.directory_entry.delete(0, tk.END)
         ctx_ui.directory_entry.insert(0, current_directory)
         ctx_ui.refresh_file_list()
-    
+
+    # Restore file list column widths if available
+    if hasattr(ctx_ui, 'file_tree') and ctx_ui.file_tree is not None:
+        col_settings = settings.get("file_list_columns", {})
+        if col_settings:
+            ctx_ui.file_tree.column("name", width=col_settings.get("name", 200))
+            ctx_ui.file_tree.column("size", width=col_settings.get("size", 80))
+

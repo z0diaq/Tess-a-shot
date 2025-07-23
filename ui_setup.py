@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import scrolledtext
+from tkinter import ttk  # Add ttk for Treeview
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
 import ctx_ui
@@ -74,19 +75,24 @@ def setup():
     file_list_label = tk.Label(ctx_ui.left_frame, text="Image Files:")
     file_list_label.pack(pady=(0, 5), anchor=tk.W)
 
-    # Create scrollable listbox for files
+    # Create scrollable Treeview for files
     file_list_frame = tk.Frame(ctx_ui.left_frame)
     file_list_frame.pack(fill=tk.BOTH, expand=True)
 
-    ctx_ui.file_listbox = file_listbox = tk.Listbox(file_list_frame, selectmode=tk.SINGLE, exportselection=0)
-    file_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    columns = ("name", "size")
+    ctx_ui.file_tree = file_tree = ttk.Treeview(file_list_frame, columns=columns, show="headings", selectmode="browse")
+    file_tree.heading("name", text="Name", command=lambda: ui_ops.sort_file_tree("name"))
+    file_tree.heading("size", text="Size (kiB)", command=lambda: ui_ops.sort_file_tree("size"))
+    file_tree.column("name", width=settings.settings.get("file_list_columns", {}).get("name", 200), anchor=tk.W)
+    file_tree.column("size", width=settings.settings.get("file_list_columns", {}).get("size", 80), anchor=tk.E)
+    file_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-    file_scrollbar = tk.Scrollbar(file_list_frame, orient=tk.VERTICAL, command=file_listbox.yview)
+    file_scrollbar = tk.Scrollbar(file_list_frame, orient=tk.VERTICAL, command=file_tree.yview)
     file_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-    file_listbox.config(yscrollcommand=file_scrollbar.set)
+    file_tree.configure(yscrollcommand=file_scrollbar.set)
 
     # Bind file selection event
-    file_listbox.bind('<<ListboxSelect>>', ui_ops.on_file_select)
+    file_tree.bind('<<TreeviewSelect>>', ui_ops.on_file_select)
 
     # Right Frame - Image Preview Components
     image_frame_label = tk.Label(ctx_ui.image_preview_frame, text="Image Preview:")

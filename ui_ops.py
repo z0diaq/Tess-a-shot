@@ -1,4 +1,4 @@
-from tkinter import filedialog, Canvas
+from tkinter import filedialog
 import tkinter as tk
 import os
 import time
@@ -11,20 +11,38 @@ status_message = ""
 
 resize_delay = 300  # Milliseconds
 
+# Track sort order for columns
+file_tree_sort_column = "name"
+file_tree_sort_reverse = False
+
 def on_file_select(event):
-    """Handles file selection from the listbox."""
-    selection = ctx_ui.file_listbox.curselection()
+    """Handles file selection from the file tree."""
+    selection = ctx_ui.file_tree.selection()
     if not selection:
         return
-    
-    # Extract file name from display string (remove size info)
-    display_name = ctx_ui.file_listbox.get(selection[0])
-    file_name = display_name.split(' (')[0]
+    item_id = selection[0]
+    file_name = ctx_ui.file_tree.item(item_id, "values")[0]
     settings.current_file = file_name
     file_path = os.path.join(settings.current_directory, file_name)
-    
-    # Load the selected image
     image_ops.load_image(file_path)
+
+def sort_file_tree(column):
+    """Sort the file tree by the given column."""
+    global file_tree_sort_column, file_tree_sort_reverse
+    file_tree = ctx_ui.file_tree
+    items = [(file_tree.set(k, column), k) for k in file_tree.get_children("")]
+    if column == "size":
+        items.sort(key=lambda t: float(t[0]), reverse=(file_tree_sort_column == column and not file_tree_sort_reverse))
+    else:
+        items.sort(key=lambda t: t[0].lower(), reverse=(file_tree_sort_column == column and not file_tree_sort_reverse))
+    for index, (val, k) in enumerate(items):
+        file_tree.move(k, '', index)
+    # Toggle sort order if same column, else reset
+    if file_tree_sort_column == column:
+        file_tree_sort_reverse = not file_tree_sort_reverse
+    else:
+        file_tree_sort_column = column
+        file_tree_sort_reverse = False
 
 def handle_drop(event):
     """
@@ -52,7 +70,11 @@ def handle_drop(event):
 def select_directory():
     """Opens a file dialog to select a directory."""
     
-    directory_path = filedialog.askdirectory()
+    # Use current directory from settings if available
+    if not settings.current_directory or not os.path.exists(settings.current_directory):
+        settings.current_directory = os.getcwd()
+    directory_path = filedialog.askdirectory(title="Select Directory",
+                                             initialdir=settings.current_directory)
     if not directory_path:
         return
         
@@ -66,36 +88,29 @@ def select_directory():
 
 def refresh_file_list():
     """Refreshes the file list based on the current directory."""
-    # Clear the current file list
-    ctx_ui.file_listbox.delete(0, tk.END)
-
+    file_tree = ctx_ui.file_tree
+    file_tree.delete(*file_tree.get_children())
     if not settings.current_directory or not os.path.exists(settings.current_directory):
         return
-
-    # Get all image files in the directory
     image_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif')
     try:
-        files = [f for f in os.listdir(settings.current_directory) 
-                if os.path.isfile(os.path.join(settings.current_directory, f)) 
+        files = [f for f in os.listdir(settings.current_directory)
+                if os.path.isfile(os.path.join(settings.current_directory, f))
                 and f.lower().endswith(image_extensions)]
-        # Sort files alphabetically
         files.sort()
-        # Add files to the listbox with size
         for file in files:
             file_path = os.path.join(settings.current_directory, file)
-            size = os.path.getsize(file_path)
-            display_name = f"{file} ({size/1024:.1f} KiB)"
-            ctx_ui.file_listbox.insert(tk.END, display_name)
-        # Adjust selection logic to match display name
+            size_kib = os.path.getsize(file_path) / 1024
+            file_tree.insert('', 'end', values=(file, f"{size_kib:.1f}"))
+        # Select current file if present
         if settings.current_file and settings.current_file in files:
-            index = files.index(settings.current_file)
-            ctx_ui.file_listbox.selection_clear(0, tk.END)
-            ctx_ui.file_listbox.selection_set(index)
-            ctx_ui.file_listbox.see(index)
-            file_path = os.path.join(settings.current_directory, settings.current_file)
-            # Load the selected image
-            image_ops.load_image(file_path)
-        # Update status
+            for iid in file_tree.get_children():
+                if file_tree.item(iid, "values")[0] == settings.current_file:
+                    file_tree.selection_set(iid)
+                    file_tree.see(iid)
+                    file_path = os.path.join(settings.current_directory, settings.current_file)
+                    image_ops.load_image(file_path)
+                    break
         set_status(f"Found {len(files)} image files in {settings.current_directory}")
     except Exception as e:
         set_status(f"Error reading directory: {e}")
@@ -149,10 +164,8 @@ def on_resize(event):
     current_time = time.time() * 1000  # Convert to milliseconds
     
     # Cancel any pending resize tasks
-    try:
+    if hasattr(ctx_ui.window, '_resize_job'):
         ctx_ui.window.after_cancel(ctx_ui.window._resize_job)
-    except (AttributeError, tk.TclError):
-        pass
     
     # Schedule a new resize task with delay
     ctx_ui.window._resize_job = ctx_ui.window.after(resize_delay, image_ops.display_image)

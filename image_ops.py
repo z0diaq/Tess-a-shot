@@ -12,10 +12,10 @@ import text_ops
 
 original_image = None
 loaded_image_path = None
+image_file_name = None
 image_load_time = 0
 image_resize_time = 0
 image_ocr_time = 0
-image_file_name = None
 extracted_text = ""
 last_resize_time = 0
 
@@ -45,15 +45,13 @@ def load_image(file_path):
         ctx_ui.directory_entry.insert(0, directory)
         ui_ops.refresh_file_list()
         
-        # Select the file in the listbox
+        # Select the file in the treeview
         filename = os.path.basename(file_path)
-        for i in range(ctx_ui.file_listbox.size()):
-            if ctx_ui.file_listbox.get(i) == filename:
-                ctx_ui.file_listbox.selection_clear(0, tk.END)
-                ctx_ui.file_listbox.selection_set(i)
-                ctx_ui.file_listbox.see(i)
+        for iid in ctx_ui.file_tree.get_children():
+            if ctx_ui.file_tree.item(iid, "values")[0] == filename:
+                ctx_ui.file_tree.selection_set(iid)
+                ctx_ui.file_tree.see(iid)
                 break
-    
     # Start timing for image loading
     start_time = time.time()
     
@@ -293,18 +291,19 @@ def delete_image():
         os.remove(loaded_image_path)
         ui_ops.set_status(f"Image deleted: {loaded_image_path}")
         
-        # Remove from listbox
+        # Remove from treeview
         filename = os.path.basename(loaded_image_path)
-        next_index = None
-        for i in range(ctx_ui.file_listbox.size()):
-            if ctx_ui.file_listbox.get(i) == filename:
-                ctx_ui.file_listbox.delete(i)
+        next_iid = None
+        iids = list(ctx_ui.file_tree.get_children())
+        for idx, iid in enumerate(iids):
+            if ctx_ui.file_tree.item(iid, "values")[0] == filename:
+                ctx_ui.file_tree.delete(iid)
                 # Determine next file index
-                if ctx_ui.file_listbox.size() > 0:
-                    if i < ctx_ui.file_listbox.size():
-                        next_index = i
-                    else:
-                        next_index = ctx_ui.file_listbox.size() - 1
+                if len(iids) > 1:
+                    if idx < len(iids) - 1:
+                        next_iid = iids[idx + 1]
+                    elif idx > 0:
+                        next_iid = iids[idx - 1]
                 break
         
         # Clear the UI elements
@@ -321,13 +320,11 @@ def delete_image():
         last_display_height = 0
 
         # Automatically open and process the next file in the list, if any
-        if next_index is not None and next_index < ctx_ui.file_listbox.size():
-            next_file = ctx_ui.file_listbox.get(next_index)
-            # Highligh the next file in the listbox
-            ctx_ui.file_listbox.selection_clear(0, tk.END)
-            ctx_ui.file_listbox.selection_set(next_index)
-            ctx_ui.file_listbox.see(next_index)
-            next_file_path = os.path.join(settings.current_directory, next_file)
+        if next_iid is not None:
+            file_name = ctx_ui.file_tree.item(next_iid, "values")[0]
+            ctx_ui.file_tree.selection_set(next_iid)
+            ctx_ui.file_tree.see(next_iid)
+            next_file_path = os.path.join(settings.current_directory, file_name)
             load_image(next_file_path)
     except Exception as e:
         ui_ops.set_status(f"Error deleting image: {e}")
