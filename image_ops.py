@@ -269,13 +269,13 @@ def process_image_async():
                 ui_ops.show_status()
             ctx_ui.window.after(0, update_ui)
         except Exception as e:
-            def update_ui_error():
+            def update_ui_error(e):
                 if my_generation != ocr_generation:
                     return  # Cancelled
                 ctx_ui.text_output.delete("1.0", tk.END)
                 ctx_ui.text_output.insert(tk.END, f"Error during OCR processing: {e}")
                 ui_ops.show_status()
-            ctx_ui.window.after(0, update_ui_error)
+            ctx_ui.window.after(0, update_ui_error, e)
     threading.Thread(target=ocr_task, args=(my_generation,), daemon=True).start()
 
 # Function to delete the current image file
