@@ -6,6 +6,7 @@ image_preview_frame = None
 text_output_frame = None
 text_output = None
 copy_on_select_var = None
+copy_on_region_select_var = None
 reformat_lines_var = None
 remember_region_var = None
 

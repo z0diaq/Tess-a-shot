@@ -4,6 +4,7 @@ import tkinter as tk
 from PIL import Image, ImageTk
 import pytesseract
 import threading
+import pyperclip
 
 import ui_ops
 import ctx_ui
@@ -267,6 +268,15 @@ def process_image_async():
                 ctx_ui.text_output.delete("1.0", tk.END)
                 ctx_ui.text_output.insert(tk.END, result)
                 ui_ops.show_status()
+                
+                # Auto-copy to clipboard if "Copy text on region select" is enabled
+                if ctx_ui.copy_on_region_select_var.get() and result:
+                    # Apply reformatting if the option is checked
+                    text_to_copy = result
+                    if ctx_ui.reformat_lines_var.get():
+                        text_to_copy = text_ops.reformat_text(text_to_copy)
+                    pyperclip.copy(text_to_copy)
+                    ui_ops.set_status("Text extracted and copied to clipboard.")
             ctx_ui.window.after(0, update_ui)
         except Exception as e:
             def update_ui_error(e):

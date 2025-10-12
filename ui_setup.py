@@ -123,28 +123,42 @@ def setup():
     button_delete = tk.Button(text_output_controls, text="Delete Image File", command=image_ops.delete_image, bg="#ffcccc")
     button_delete.pack(side=tk.RIGHT, padx=5)
 
-    # Add checkboxes in a horizontal frame
-    checkboxes_frame = tk.Frame(ctx_ui.text_output_frame)
-    checkboxes_frame.pack(anchor=tk.W, pady=(0, 5), fill=tk.X)
+    # Create notebook (tabbed interface) for extracted text and options
+    notebook = ttk.Notebook(ctx_ui.text_output_frame)
+    notebook.pack(fill=tk.BOTH, expand=True)
 
-    # "Copy text on select" checkbox
+    # Create "Extracted Text" tab
+    extracted_text_tab = tk.Frame(notebook)
+    notebook.add(extracted_text_tab, text="Extracted Text")
+
+    # Text output area in the Extracted Text tab
+    ctx_ui.text_output = scrolledtext.ScrolledText(extracted_text_tab)
+    ctx_ui.text_output.pack(fill=tk.BOTH, expand=True)
+
+    # Create "Options" tab
+    options_tab = tk.Frame(notebook)
+    notebook.add(options_tab, text="Options")
+
+    # Add checkboxes in the Options tab
+    # "Copy text on image region select" checkbox
+    ctx_ui.copy_on_region_select_var = tk.BooleanVar()
+    copy_on_region_select_checkbox = tk.Checkbutton(options_tab, text="Copy text on image region select", variable=ctx_ui.copy_on_region_select_var)
+    copy_on_region_select_checkbox.pack(anchor=tk.W, padx=10, pady=(10, 5))
+
+    # "Copy text on extracted text select" checkbox
     ctx_ui.copy_on_select_var = copy_on_select_var = tk.BooleanVar()
-    copy_on_select_checkbox = tk.Checkbutton(checkboxes_frame, text="Copy text on select", variable=copy_on_select_var)
-    copy_on_select_checkbox.pack(side=tk.LEFT, padx=(0, 10))
+    copy_on_select_checkbox = tk.Checkbutton(options_tab, text="Copy text on extracted text select", variable=copy_on_select_var)
+    copy_on_select_checkbox.pack(anchor=tk.W, padx=10, pady=5)
 
     # "Reformat copied lines" checkbox
     ctx_ui.reformat_lines_var = reformat_lines_var = tk.BooleanVar()
-    reformat_lines_checkbox = tk.Checkbutton(checkboxes_frame, text="Reformat copied lines", variable=reformat_lines_var)
-    reformat_lines_checkbox.pack(side=tk.LEFT)
+    reformat_lines_checkbox = tk.Checkbutton(options_tab, text="Reformat copied lines", variable=reformat_lines_var)
+    reformat_lines_checkbox.pack(anchor=tk.W, padx=10, pady=5)
 
     # "Remember region" checkbox
     ctx_ui.remember_region_var = tk.BooleanVar()
-    remember_region_checkbox = tk.Checkbutton(checkboxes_frame, text="Remember region", variable=ctx_ui.remember_region_var)
-    remember_region_checkbox.pack(side=tk.LEFT, padx=(10, 0))
-
-    # Text output area
-    ctx_ui.text_output = scrolledtext.ScrolledText(ctx_ui.text_output_frame)
-    ctx_ui.text_output.pack(fill=tk.BOTH, expand=True)
+    remember_region_checkbox = tk.Checkbutton(options_tab, text="Remember region", variable=ctx_ui.remember_region_var)
+    remember_region_checkbox.pack(anchor=tk.W, padx=10, pady=5)
 
     # Bind the text selection event to the text_output widget
     ctx_ui.text_output.bind("<<Selection>>", text_ops.on_text_selection)
