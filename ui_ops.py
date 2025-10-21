@@ -191,13 +191,13 @@ def set_initial_sash_positions():
     window_height = ctx_ui.window.winfo_height()
     
     if window_width > 1 and window_height > 1:  # Ensure window has been drawn
-        # Set main paned window sash position
-        left_width = int(window_width * settings.settings["pane_ratio"])
+        # Set first sash position (between left and middle columns)
+        left_width = int(window_width * settings.settings.get("pane_ratio", 0.25))
         ctx_ui.main_paned_window.sash_place(0, left_width, 0)
         
-        # Set right paned window sash position
-        right_height = int(window_height * settings.settings["right_pane_ratio"])
-        ctx_ui.right_paned_window.sash_place(0, 0, right_height)
+        # Set second sash position (between middle and right columns)
+        middle_width = int(window_width * settings.settings.get("middle_pane_ratio", 0.45))
+        ctx_ui.main_paned_window.sash_place(1, left_width + middle_width, 0)
         
         if ctx_ui.set_sash_job:
             ctx_ui.window.after_cancel(ctx_ui.set_sash_job)

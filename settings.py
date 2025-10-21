@@ -15,8 +15,8 @@ DEFAULT_SETTINGS = {
         "x": None,
         "y": None
     },
-    "pane_ratio": 0.3,  # 30% for file list, 70% for preview/text
-    "right_pane_ratio": 0.5,  # 50% split for image preview and text output
+    "pane_ratio": 0.25,  # 25% for file list (left column)
+    "middle_pane_ratio": 0.45,  # 45% for image preview (middle column), remaining 30% for text/options (right column)
     "options": {
         "copy_on_select": False,
         "reformat_lines": False,
@@ -45,8 +45,7 @@ def save(ctx_ui):
     settings["window"]["y"] = ctx_ui.window.winfo_y()
     if ctx_ui.main_frame.winfo_width() > 0:
         settings["pane_ratio"] = ctx_ui.left_frame.winfo_width() / ctx_ui.main_frame.winfo_width()
-    if ctx_ui.right_frame.winfo_height() > 0:
-        settings["right_pane_ratio"] = ctx_ui.image_preview_frame.winfo_height() / ctx_ui.right_frame.winfo_height()
+        settings["middle_pane_ratio"] = ctx_ui.middle_frame.winfo_width() / ctx_ui.main_frame.winfo_width()
     settings["options"]["copy_on_select"] = ctx_ui.copy_on_select_var.get()
     settings["options"]["reformat_lines"] = ctx_ui.reformat_lines_var.get()
     settings["options"]["remember_region"] = ctx_ui.remember_region_var.get()

@@ -1,6 +1,7 @@
 window = None
 main_frame = None   
 left_frame = None
+middle_frame = None
 right_frame = None
 image_preview_frame = None
 text_output_frame = None

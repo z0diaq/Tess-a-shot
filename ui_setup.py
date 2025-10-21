@@ -24,33 +24,29 @@ def setup():
     ctx_ui.main_frame = tk.Frame(ctx_ui.window)
     ctx_ui.main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-    # Create a PanedWindow for resizable frames (left/right split)
+    # Create a PanedWindow for resizable frames (3-column layout)
     ctx_ui.main_paned_window = tk.PanedWindow(ctx_ui.main_frame, orient=tk.HORIZONTAL, sashwidth=5, sashrelief=tk.RAISED)
     ctx_ui.main_paned_window.pack(fill=tk.BOTH, expand=True)
 
     # Create left frame for file list
     ctx_ui.left_frame = tk.Frame(ctx_ui.main_paned_window)
 
-    # Create right frame for image preview and text output
+    # Create middle frame for image preview
+    ctx_ui.middle_frame = tk.Frame(ctx_ui.main_paned_window)
+
+    # Create right frame for text output and options
     ctx_ui.right_frame = tk.Frame(ctx_ui.main_paned_window)
 
     # Add the frames to the main paned window
-    ctx_ui.main_paned_window.add(ctx_ui.left_frame, width=250)  # Default width for file list
-    ctx_ui.main_paned_window.add(ctx_ui.right_frame, width=650)  # Default width for preview/text
+    ctx_ui.main_paned_window.add(ctx_ui.left_frame, width=250)    # Default width for file list
+    ctx_ui.main_paned_window.add(ctx_ui.middle_frame, width=400)  # Default width for image preview
+    ctx_ui.main_paned_window.add(ctx_ui.right_frame, width=350)   # Default width for text/options
 
-    # Create a vertical PanedWindow for the right frame (preview/text split)
-    ctx_ui.right_paned_window = tk.PanedWindow(ctx_ui.right_frame, orient=tk.VERTICAL, sashwidth=5, sashrelief=tk.RAISED)
-    ctx_ui.right_paned_window.pack(fill=tk.BOTH, expand=True)
+    # Image preview frame is now directly in the middle frame
+    ctx_ui.image_preview_frame = ctx_ui.middle_frame
 
-    ctx_ui.right_paned_window.bind('<B1-Motion>', ui_ops.on_right_pane_drag)
-
-    # Create frames for the right paned window
-    ctx_ui.image_preview_frame = tk.Frame(ctx_ui.right_paned_window)
-    ctx_ui.text_output_frame = tk.Frame(ctx_ui.right_paned_window)
-
-    # Add the frames to the right paned window
-    ctx_ui.right_paned_window.add(ctx_ui.image_preview_frame, height=300)  # Default height for preview
-    ctx_ui.right_paned_window.add(ctx_ui.text_output_frame, height=300)    # Default height for text
+    # Text output frame is now directly in the right frame
+    ctx_ui.text_output_frame = ctx_ui.right_frame
 
     # Top controls frame
     controls_frame = tk.Frame(ctx_ui.window)
@@ -94,7 +90,7 @@ def setup():
     # Bind file selection event
     file_tree.bind('<<TreeviewSelect>>', ui_ops.on_file_select)
 
-    # Right Frame - Image Preview Components
+    # Middle Frame - Image Preview Components
     image_frame_label = tk.Label(ctx_ui.image_preview_frame, text="Image Preview:")
     image_frame_label.pack(pady=(0, 5), anchor=tk.W)
 
