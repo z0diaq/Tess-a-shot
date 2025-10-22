@@ -9,6 +9,64 @@ import ui_ops
 import text_ops
 import image_ops
 
+def set_interaction_mode(mode):
+    """Set the interaction mode and update the context menu."""
+    ctx_ui.interaction_mode = mode
+    ui_ops.set_status(f"Mode: {mode.replace('_', ' ').title()}")
+
+def show_context_menu(event):
+    """Show the context menu at the cursor position."""
+    if ctx_ui.context_menu is None:
+        create_context_menu()
+    
+    # Update labels based on current mode
+    mode_labels = {
+        "area_selection": "Area selection",
+        "drag": "Drag",
+        "zoom_in": "Zoom in",
+        "zoom_out": "Zoom out"
+    }
+    
+    mode_index = {
+        "area_selection": 0,
+        "drag": 1,
+        "zoom_in": 2,
+        "zoom_out": 3
+    }
+    
+    # Update each menu item with or without checkmark
+    for mode, idx in mode_index.items():
+        label = mode_labels[mode]
+        if mode == ctx_ui.interaction_mode:
+            ctx_ui.context_menu.entryconfigure(idx, label=f"✓ {label}")
+        else:
+            ctx_ui.context_menu.entryconfigure(idx, label=f"  {label}")
+    
+    try:
+        ctx_ui.context_menu.tk_popup(event.x_root, event.y_root)
+    finally:
+        ctx_ui.context_menu.grab_release()
+
+def create_context_menu():
+    """Create the context menu for the image canvas."""
+    ctx_ui.context_menu = tk.Menu(ctx_ui.window, tearoff=0)
+    ctx_ui.context_menu.add_command(
+        label="✓ Area selection",
+        command=lambda: set_interaction_mode("area_selection")
+    )
+    ctx_ui.context_menu.add_command(
+        label="  Drag",
+        command=lambda: set_interaction_mode("drag")
+    )
+    ctx_ui.context_menu.add_command(
+        label="  Zoom in",
+        command=lambda: set_interaction_mode("zoom_in")
+    )
+    ctx_ui.context_menu.add_command(
+        label="  Zoom out",
+        command=lambda: set_interaction_mode("zoom_out")
+    )
+
 def setup():
     ctx_ui.refresh_file_list = ui_ops.refresh_file_list
 
@@ -97,9 +155,16 @@ def setup():
     ctx_ui.image_canvas = tk.Canvas(ctx_ui.image_preview_frame, bg="lightgray")
     ctx_ui.image_canvas.pack(fill=tk.BOTH, expand=True)
 
-    ctx_ui.image_canvas.bind("<ButtonPress-1>", image_ops.on_selection_start)
-    ctx_ui.image_canvas.bind("<B1-Motion>", image_ops.on_selection_motion)
-    ctx_ui.image_canvas.bind("<ButtonRelease-1>", image_ops.on_selection_end)
+    # Set default interaction mode
+    ctx_ui.interaction_mode = "area_selection"
+
+    # Bind mouse events to routing functions
+    ctx_ui.image_canvas.bind("<ButtonPress-1>", image_ops.on_mouse_press)
+    ctx_ui.image_canvas.bind("<B1-Motion>", image_ops.on_mouse_motion)
+    ctx_ui.image_canvas.bind("<ButtonRelease-1>", image_ops.on_mouse_release)
+    
+    # Bind right-click to show context menu
+    ctx_ui.image_canvas.bind("<Button-3>", show_context_menu)
 
     # Make image_canvas a drop target
     ctx_ui.image_canvas.drop_target_register(DND_FILES)

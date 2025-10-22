@@ -19,3 +19,7 @@ status_label = None
 image_canvas = None
 main_paned_window = None
 set_sash_job = None
+
+# Context menu and interaction mode
+context_menu = None
+interaction_mode = None  # Values: "area_selection", "drag", "zoom_in", "zoom_out"

@@ -32,11 +32,23 @@ display_scale_factor = (1, 1)  # (width_scale, height_scale)
 ocr_generation = 0
 ocr_generation_lock = threading.Lock()
 
+# Zoom and pan variables
+zoom_level = 1.0  # Current zoom level
+pan_offset_x = 0  # Pan offset in display pixels
+pan_offset_y = 0
+drag_start_x = 0  # Starting point for drag operation
+drag_start_y = 0
+
 def load_image(file_path):
     """
     Loads an image from the specified file path, updates the UI, and processes the image for OCR.
     """
-    global loaded_image_path, original_image, image_load_time, image_file_name, selection_rect
+    global loaded_image_path, original_image, image_load_time, image_file_name, selection_rect, zoom_level, pan_offset_x, pan_offset_y
+    
+    # Reset zoom and pan when loading a new image
+    zoom_level = 1.0
+    pan_offset_x = 0
+    pan_offset_y = 0
 
     # Update the directory entry if it's from a different directory
     directory = os.path.dirname(file_path)
@@ -144,15 +156,26 @@ def display_image(force=False):
         
         display_scale_factor = (width / new_width, height / new_height)
 
-        # Resize the image
-        img_resized = original_image.resize((new_width, new_height), Image.LANCZOS)
+        # Apply zoom to the dimensions
+        zoomed_width = int(new_width * zoom_level)
+        zoomed_height = int(new_height * zoom_level)
+
+        # Resize the image with zoom applied
+        img_resized = original_image.resize((zoomed_width, zoomed_height), Image.LANCZOS)
         
         # Convert to PhotoImage for Tkinter
         photo = ImageTk.PhotoImage(img_resized)
 
         canvas_width = ctx_ui.image_canvas.winfo_width()
-        image_x = (canvas_width - new_width) // 2
-        image_y = 0  # Top-aligned
+        canvas_height = ctx_ui.image_canvas.winfo_height()
+        
+        # Calculate base position (centered)
+        base_image_x = (canvas_width - zoomed_width) // 2
+        base_image_y = (canvas_height - zoomed_height) // 2
+        
+        # Apply pan offset
+        image_x = base_image_x + pan_offset_x
+        image_y = base_image_y + pan_offset_y
 
         # Clear canvas and redraw image
         ctx_ui.image_canvas.delete("all")
@@ -199,13 +222,19 @@ def update_selection_rectangle_from_coords():
     
     # Get canvas and image display info
     canvas_width = ctx_ui.image_canvas.winfo_width()
+    canvas_height = ctx_ui.image_canvas.winfo_height()
     if img_resized is not None:
         img_width, img_height = img_resized.size
     else:
         return
-        
-    image_x = (canvas_width - img_width) // 2
-    image_y = 0  # Top-aligned
+    
+    # Calculate base position (centered)
+    base_image_x = (canvas_width - img_width) // 2
+    base_image_y = (canvas_height - img_height) // 2
+    
+    # Apply pan offset
+    image_x = base_image_x + pan_offset_x
+    image_y = base_image_y + pan_offset_y
     
     # Convert original image coordinates to display coordinates
     orig_x1, orig_y1, orig_x2, orig_y2 = settings.selection_coords
@@ -355,9 +384,14 @@ def update_selection_rectangle():
         img_width, img_height = img_resized.size
     else:
         img_width, img_height = canvas_width, canvas_height
-        
-    image_x = (canvas_width - img_width) // 2
-    image_y = 0  # Top-aligned
+    
+    # Calculate base position (centered)
+    base_image_x = (canvas_width - img_width) // 2
+    base_image_y = (canvas_height - img_height) // 2
+    
+    # Apply pan offset
+    image_x = base_image_x + pan_offset_x
+    image_y = base_image_y + pan_offset_y
     
     # Get the rectangle coordinates in display space
     x1, y1, x2, y2 = ctx_ui.image_canvas.coords(selection_rect)
@@ -432,9 +466,15 @@ def on_selection_motion(event):
             img_width, img_height = img_resized.size
         else:
             img_width, img_height = canvas_width, canvas_height
-        # Centered image x offset
-        image_x = (canvas_width - img_width) // 2
-        image_y = 0  # Top-aligned
+        
+        # Calculate base position (centered)
+        base_image_x = (canvas_width - img_width) // 2
+        base_image_y = (canvas_height - img_height) // 2
+        
+        # Apply pan offset
+        image_x = base_image_x + pan_offset_x
+        image_y = base_image_y + pan_offset_y
+        
         # Constrain mouse to image area
         x = min(max(event.x, image_x), image_x + img_width)
         y = min(max(event.y, image_y), image_y + img_height)
@@ -449,3 +489,179 @@ def on_selection_end(event):
     update_selection_rectangle()
     # Process the selected region
     process_image_async()
+
+def center_image_on_point(click_x, click_y, current_width, current_height, new_zoom_level):
+    """
+    Calculate pan offsets to center the image on a specific point after zoom.
+    
+    Args:
+        click_x, click_y: Click coordinates on canvas
+        current_width, current_height: Current displayed image dimensions
+        new_zoom_level: The zoom level to apply
+        
+    Returns:
+        tuple: (pan_offset_x, pan_offset_y)
+    """
+    canvas_width = ctx_ui.image_canvas.winfo_width()
+    canvas_height = ctx_ui.image_canvas.winfo_height()
+    
+    # Get current image position
+    base_image_x = (canvas_width - current_width) // 2
+    base_image_y = (canvas_height - current_height) // 2
+    image_x = base_image_x + pan_offset_x
+    image_y = base_image_y + pan_offset_y
+    
+    # Calculate position relative to current image
+    rel_x = click_x - image_x
+    rel_y = click_y - image_y
+    
+    # Calculate new image dimensions after zoom
+    width, height = original_image.size
+    if width / height > canvas_width / canvas_height:
+        new_width = canvas_width
+        new_height = int(height * (canvas_width / width))
+    else:
+        new_height = canvas_height
+        new_width = int(width * (canvas_height / height))
+    
+    zoomed_width = int(new_width * new_zoom_level)
+    zoomed_height = int(new_height * new_zoom_level)
+    
+    # Calculate the ratio of where the click was in the current image
+    if current_width > 0 and current_height > 0:
+        click_ratio_x = rel_x / current_width
+        click_ratio_y = rel_y / current_height
+    else:
+        click_ratio_x = 0.5
+        click_ratio_y = 0.5
+    
+    # Calculate where that point is in the new zoomed image
+    new_point_x = click_ratio_x * zoomed_width
+    new_point_y = click_ratio_y * zoomed_height
+    
+    # Center the canvas on the click position
+    canvas_center_x = canvas_width // 2
+    canvas_center_y = canvas_height // 2
+    
+    # Calculate new pan offset to center on click point
+    base_new_image_x = (canvas_width - zoomed_width) // 2
+    base_new_image_y = (canvas_height - zoomed_height) // 2
+    
+    new_pan_x = canvas_center_x - base_new_image_x - new_point_x
+    new_pan_y = canvas_center_y - base_new_image_y - new_point_y
+    
+    return (new_pan_x, new_pan_y)
+
+def zoom_in_at_point(event):
+    """Zoom in by 1.5x and center on the click position."""
+    global zoom_level, pan_offset_x, pan_offset_y
+    
+    if not original_image or img_resized is None:
+        return
+    
+    current_width, current_height = img_resized.size
+    
+    # Apply zoom
+    zoom_level *= 1.5
+    
+    # Calculate new pan offsets to center on click point
+    pan_offset_x, pan_offset_y = center_image_on_point(
+        event.x, event.y, current_width, current_height, zoom_level
+    )
+    
+    # Redraw the image
+    display_image(force=True)
+
+def zoom_out_at_point(event):
+    """Zoom out by 1.5x and center on the click position."""
+    global zoom_level, pan_offset_x, pan_offset_y
+    
+    if not original_image or img_resized is None:
+        return
+    
+    current_width, current_height = img_resized.size
+    
+    # Apply zoom
+    zoom_level /= 1.5
+    
+    # Don't zoom out beyond 1.0
+    if zoom_level < 1.0:
+        zoom_level = 1.0
+        pan_offset_x = 0
+        pan_offset_y = 0
+    else:
+        # Calculate new pan offsets to center on click point
+        pan_offset_x, pan_offset_y = center_image_on_point(
+            event.x, event.y, current_width, current_height, zoom_level
+        )
+    
+    # Redraw the image
+    display_image(force=True)
+
+def on_drag_start(event):
+    """Start dragging the image."""
+    global drag_start_x, drag_start_y
+    drag_start_x = event.x
+    drag_start_y = event.y
+
+def on_drag_motion(event):
+    """Handle image dragging."""
+    global pan_offset_x, pan_offset_y, drag_start_x, drag_start_y
+    
+    if not original_image:
+        return
+    
+    # Calculate drag delta
+    delta_x = event.x - drag_start_x
+    delta_y = event.y - drag_start_y
+    
+    # Update pan offset
+    pan_offset_x += delta_x
+    pan_offset_y += delta_y
+    
+    # Update drag start position
+    drag_start_x = event.x
+    drag_start_y = event.y
+    
+    # Redraw the image
+    display_image(force=True)
+
+def on_drag_end(event):
+    """End dragging the image."""
+    pass  # Nothing special to do on drag end
+
+def on_mouse_press(event):
+    """Route mouse press event based on interaction mode."""
+    mode = ctx_ui.interaction_mode
+    
+    if mode == "area_selection":
+        on_selection_start(event)
+    elif mode == "drag":
+        on_drag_start(event)
+    elif mode == "zoom_in":
+        zoom_in_at_point(event)
+    elif mode == "zoom_out":
+        zoom_out_at_point(event)
+    else:
+        # Default to area selection
+        on_selection_start(event)
+
+def on_mouse_motion(event):
+    """Route mouse motion event based on interaction mode."""
+    mode = ctx_ui.interaction_mode
+    
+    if mode == "area_selection":
+        on_selection_motion(event)
+    elif mode == "drag":
+        on_drag_motion(event)
+    # zoom_in and zoom_out don't have motion handlers
+
+def on_mouse_release(event):
+    """Route mouse release event based on interaction mode."""
+    mode = ctx_ui.interaction_mode
+    
+    if mode == "area_selection":
+        on_selection_end(event)
+    elif mode == "drag":
+        on_drag_end(event)
+    # zoom_in and zoom_out don't have release handlers
