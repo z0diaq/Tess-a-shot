@@ -18,6 +18,7 @@ DEFAULT_SETTINGS = {
     "pane_ratio": 0.25,  # 25% for file list (left column)
     "middle_pane_ratio": 0.45,  # 45% for image preview (middle column), remaining 30% for text/options (right column)
     "options": {
+        "copy_on_region_select": False,
         "copy_on_select": False,
         "reformat_lines": False,
         "remember_region": False
@@ -46,6 +47,7 @@ def save(ctx_ui):
     if ctx_ui.main_frame.winfo_width() > 0:
         settings["pane_ratio"] = ctx_ui.left_frame.winfo_width() / ctx_ui.main_frame.winfo_width()
         settings["middle_pane_ratio"] = ctx_ui.middle_frame.winfo_width() / ctx_ui.main_frame.winfo_width()
+    settings["options"]["copy_on_region_select"] = ctx_ui.copy_on_region_select_var.get()
     settings["options"]["copy_on_select"] = ctx_ui.copy_on_select_var.get()
     settings["options"]["reformat_lines"] = ctx_ui.reformat_lines_var.get()
     settings["options"]["remember_region"] = ctx_ui.remember_region_var.get()
@@ -98,6 +100,7 @@ def apply(ctx_ui):
     if x is not None and y is not None:
         geometry += f"+{x}+{y}"
     ctx_ui.window.geometry(geometry)
+    ctx_ui.copy_on_region_select_var.set(settings["options"].get("copy_on_region_select", False))
     ctx_ui.copy_on_select_var.set(settings["options"]["copy_on_select"])
     ctx_ui.reformat_lines_var.set(settings["options"]["reformat_lines"])
     ctx_ui.remember_region_var.set(settings["options"].get("remember_region", False))
