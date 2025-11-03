@@ -43,8 +43,15 @@ def copy_to_clipboard():
 # Function to handle text selection
 def on_text_selection(event):
     """Copy selected text to clipboard when text is selected and checkbox is checked"""
-    if ctx_ui.copy_on_select_var.get():
-        try:
+    try:
+        # Force focus to the text widget to ensure selection is visible
+        ctx_ui.text_output.focus_set()
+        
+        # Ensure the selection is in view and update display
+        ctx_ui.text_output.see(tk.SEL_FIRST)
+        ctx_ui.text_output.update_idletasks()
+        
+        if ctx_ui.copy_on_select_var.get():
             selected_text = ctx_ui.text_output.get(tk.SEL_FIRST, tk.SEL_LAST)
             if selected_text:
                 # Apply reformatting if the option is checked
@@ -53,8 +60,8 @@ def on_text_selection(event):
                 
                 pyperclip.copy(selected_text)
                 ui_ops.set_status("Selected text copied to clipboard.")
-        except tk.TclError:  # No selection
-            pass  # Do nothing if no text is selected
+    except tk.TclError:  # No selection or other Tcl errors
+        pass  # Do nothing if no text is selected or other errors occur
 
 def log(message):
     """Log messages to the console."""

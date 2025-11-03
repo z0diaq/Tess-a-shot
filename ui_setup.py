@@ -223,6 +223,28 @@ def setup():
 
     # Bind the text selection event to the text_output widget
     ctx_ui.text_output.bind("<<Selection>>", text_ops.on_text_selection)
+    
+    # Store the notebook reference in ctx_ui for later use
+    ctx_ui.notebook = notebook
+    
+    def on_tab_changed(event):
+        # Force refresh of the text selection when switching tabs
+        if ctx_ui.text_output.tag_ranges(tk.SEL):
+            # Temporarily store the selection
+            sel_start = ctx_ui.text_output.index(tk.SEL_FIRST)
+            sel_end = ctx_ui.text_output.index(tk.SEL_LAST)
+            
+            # Remove and re-apply the selection to force a refresh
+            ctx_ui.text_output.tag_remove(tk.SEL, "1.0", tk.END)
+            ctx_ui.text_output.update_idletasks()
+            
+            # Re-apply the selection and ensure it's visible
+            ctx_ui.text_output.tag_add(tk.SEL, sel_start, sel_end)
+            ctx_ui.text_output.see(sel_start)
+            ctx_ui.text_output.focus_set()
+    
+    # Bind the tab changed event
+    notebook.bind("<<NotebookTabChanged>>", on_tab_changed)
 
     # Status bar at the bottom
     ctx_ui.status_label = status_label = tk.Label(ctx_ui.window, text="No image loaded", bd=1, relief=tk.SUNKEN, anchor=tk.W)
