@@ -13,6 +13,16 @@ def set_interaction_mode(mode):
     """Set the interaction mode and update the context menu."""
     ctx_ui.interaction_mode = mode
     ui_ops.set_status(f"Mode: {mode.replace('_', ' ').title()}")
+    # Close the context menu after selection
+    if ctx_ui.context_menu:
+        ctx_ui.context_menu.unpost()
+    ctx_ui.context_menu_active = False
+
+def hide_context_menu(event=None):
+    """Hide the context menu without triggering any action."""
+    if ctx_ui.context_menu:
+        ctx_ui.context_menu.unpost()
+    ctx_ui.context_menu_active = False
 
 def show_context_menu(event):
     """Show the context menu at the cursor position."""
@@ -42,10 +52,26 @@ def show_context_menu(event):
         else:
             ctx_ui.context_menu.entryconfigure(idx, label=f"  {label}")
     
-    try:
-        ctx_ui.context_menu.tk_popup(event.x_root, event.y_root)
-    finally:
-        ctx_ui.context_menu.grab_release()
+    # Set flag that context menu is active
+    ctx_ui.context_menu_active = True
+    
+    # Show the menu
+    ctx_ui.context_menu.tk_popup(event.x_root, event.y_root)
+    
+    # Schedule a check to detect when menu is closed
+    def check_menu_closed():
+        try:
+            # If menu is still visible, check again later
+            if ctx_ui.context_menu and ctx_ui.context_menu.winfo_ismapped():
+                ctx_ui.window.after(50, check_menu_closed)
+            else:
+                # Menu was closed
+                ctx_ui.context_menu_active = False
+        except (tk.TclError, AttributeError):
+            # Menu no longer exists or error checking
+            ctx_ui.context_menu_active = False
+    
+    ctx_ui.window.after(50, check_menu_closed)
 
 def create_context_menu():
     """Create the context menu for the image canvas."""

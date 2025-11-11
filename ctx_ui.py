@@ -23,3 +23,4 @@ set_sash_job = None
 # Context menu and interaction mode
 context_menu = None
 interaction_mode = None  # Values: "area_selection", "drag", "zoom_in", "zoom_out"
+context_menu_active = False  # Track if context menu is currently open

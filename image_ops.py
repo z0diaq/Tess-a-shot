@@ -632,6 +632,10 @@ def on_drag_end(event):
 
 def on_mouse_press(event):
     """Route mouse press event based on interaction mode."""
+    # Don't handle mouse events if context menu is active
+    if ctx_ui.context_menu_active:
+        return
+    
     mode = ctx_ui.interaction_mode
     
     if mode == "area_selection":
