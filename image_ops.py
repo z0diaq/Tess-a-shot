@@ -186,7 +186,21 @@ def display_image(force=False):
         image_resize_time = (time.time() - start_time) * 1000  # Convert to milliseconds
 
         # Reset or adjust selection coordinates for the new image
-        if not ctx_ui.remember_region_var.get() or settings.selection_coords == [0, 0, 0, 0]:
+        if force:
+            # This is a forced redraw (zoom/drag operation)
+            # Always restore selection if there's a partial selection (not full image)
+            if settings.selection_coords != [0, 0, 0, 0]:
+                width, height = original_image.size
+                if settings.selection_coords != [0, 0, width, height]:
+                    # There's a partial selection, restore it
+                    update_selection_rectangle_from_coords()
+                else:
+                    # Full image selected, no rectangle to show
+                    selection_rect = None
+            else:
+                # No valid selection
+                selection_rect = None
+        elif not ctx_ui.remember_region_var.get() or settings.selection_coords == [0, 0, 0, 0]:
             # If not remembering region or if no region was selected, set to full image
             text_ops.log(f"Re-setting selection coordinates to full image: {settings.selection_coords}")
             width, height = original_image.size
